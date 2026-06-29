@@ -15,12 +15,14 @@ var (
 	dragX, dragY int
 	bitmapInEffect *uint64
 	clickMask uint64
+
+	clickLegalMoves uint64
 )
 
 func handleLeftPress() error {
 	dragX, dragY = ebiten.CursorPosition()
 
-	fmt.Printf("%d, %d\n", dragX/int(tileSize), dragX/int(tileSize))
+	fmt.Printf("%d, %d\n", dragX/int(tileSize), dragY/int(tileSize))
 
 	dragX /= int(tileSize)
 	dragY /= int(tileSize)
@@ -40,7 +42,10 @@ func handleLeftPress() error {
 
 	*bitmapInEffect ^= clickMask
 
+	clickLegalMoves, _ = engine.GenerateLegalMoves(*pieceInfo)
+
 	graphics.DrawPieceOnCursor(*pieceInfo)
+	graphics.StartDrawingLegalMoves()
 
 	return nil
 }
@@ -48,20 +53,24 @@ func handleLeftPress() error {
 func handleLeftRelease() error {
 	
 	graphics.StopDrawingPieceOnCursor()
+	graphics.StopDrawingLegalMoves()
 
 	x, y := ebiten.CursorPosition()
 
 	x /= int(tileSize)
 	y /= int(tileSize)
 
-	makeMask := uint64(1) << ((7-y) * 8 + x)
 
 	if x != dragX || y != dragY {
 		if bitmapInEffect == nil {
 			return nil
 		}
 
+		makeMask := uint64(1) << ((7-y) * 8 + x)
+
 		*bitmapInEffect ^= makeMask
+	} else {
+		*bitmapInEffect ^= clickMask
 	}
 
 	return nil

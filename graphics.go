@@ -8,6 +8,7 @@ import (
 
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
+	"github.com/hajimehoshi/ebiten/v2/vector"
 	//"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
@@ -16,12 +17,15 @@ type Graphics struct {
 	pieceTiles *ebiten.Image
 
 	cursorPiece PieceInfo
-	drawOnCursor bool 
+	drawOnCursor bool
+
+	drawLegalMoves bool
 }
 
 func NewGraphics() *Graphics {
 
 	drawOnCursor := false
+	drawLegalMoves := false
 
 	darkSquare := ebiten.NewImage(int(tileSize), int(tileSize))
 	darkSquare.Fill(color.RGBA{50, 50, 75, 255})
@@ -33,7 +37,8 @@ func NewGraphics() *Graphics {
 	}
 	pieceTiles := ebiten.NewImageFromImage(img)
 
-	return &Graphics{darkSquare: darkSquare, pieceTiles: pieceTiles, drawOnCursor: drawOnCursor}
+	return &Graphics{darkSquare: darkSquare, pieceTiles: pieceTiles,
+		drawOnCursor: drawOnCursor, drawLegalMoves: drawLegalMoves}
 }
 
 func (g *Graphics) DrawBoard(screen *ebiten.Image) {
@@ -114,6 +119,14 @@ func (g *Graphics) StopDrawingPieceOnCursor() {
 	g.drawOnCursor = false
 }
 
+func (g *Graphics) StartDrawingLegalMoves() {
+	g.drawLegalMoves = true
+}
+
+func (g *Graphics) StopDrawingLegalMoves() {
+	g.drawLegalMoves = false
+}
+
 
 func (g *Graphics) DrawCursorPiece(screen *ebiten.Image) error {
 
@@ -137,6 +150,27 @@ func (g *Graphics) DrawCursorPiece(screen *ebiten.Image) error {
 
 	return nil
 }
+
+func (g *Graphics) DrawLegalMoves(screen *ebiten.Image) error {
+
+	for square := 0; square < 64; square++ {
+		mask := uint64(1)<<square
+		if clickLegalMoves&mask == 0 {
+			continue
+		}
+
+		x, y, _ := MaskToSpace(mask)
+		if Occupancy() & mask == 0 {
+			g.DrawMoveDot(screen, x, y)
+		} else {
+			g.DrawCapture(screen, x, y)
+		}
+
+	}
+
+	return nil
+}
+
 /**
 * Piece Index:
 * 0 pawn, 1 rook, 2 knight, 3 bishop, 4 queen, 5 king
@@ -160,4 +194,49 @@ func (g *Graphics) GetPiece(piece int, color int) (*ebiten.Image, error) {
 	)).(*ebiten.Image)
 
 	return pieceImg, nil
+}
+
+
+func (g *Graphics) DrawMoveDot(screen *ebiten.Image, x, y int) error {
+
+	if x >= 8 || x < 0 || y >= 8 || y < 0 {
+		return errors.New("Coordinates out of bounds")
+	}
+
+	centerX := float32(x)*float32(tileSize) + float32(tileSize)/2
+	centerY := float32(y)*float32(tileSize) + float32(tileSize)/2
+
+	vector.FillCircle(
+		screen,
+		centerX,
+		centerY,
+		6,
+		color.RGBA{0, 0, 0, 120},
+		true,
+	)
+
+	return nil
+}
+
+
+func (g *Graphics) DrawCapture(screen *ebiten.Image, x, y int) error {
+
+	if x >= 8 || x < 0 || y >= 8 || y < 0 {
+		return errors.New("Coordinates out of bounds")
+	}
+
+	centerX := float32(x)*float32(tileSize) + float32(tileSize)/2
+	centerY := float32(y)*float32(tileSize) + float32(tileSize)/2
+
+	vector.StrokeCircle(
+		screen,
+		centerX,
+		centerY,
+		float32(tileSize / 2),
+		3,
+		color.RGBA{0, 0, 0, 120},
+		true,
+	)
+
+	return nil
 }

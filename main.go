@@ -43,6 +43,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	if graphics.drawOnCursor {
 		graphics.DrawCursorPiece(screen)
 	}
+	if graphics.drawLegalMoves {
+		graphics.DrawLegalMoves(screen)
+	}
 
 	//ebitenutil.DebugPrint(screen, "Hello, World!")
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"math/bits"
 )
 
 type Engine struct{
@@ -67,8 +68,8 @@ func NewEngine() *Engine {
 		e.board.whitePieces = bottomSidePieces
 		e.board.blackPieces = topSidePieces
 
-		e.board.whitePieces.king = 0X0000000000000008
-		e.board.whitePieces.queen = 0X0000000000000010
+		e.board.whitePieces.king = 0X0000000000000010
+		e.board.whitePieces.queen = 0X0000000000000008
 
 		e.board.blackPieces.king = e.board.whitePieces.king << 56
 		e.board.blackPieces.queen = e.board.whitePieces.queen << 56
@@ -77,8 +78,8 @@ func NewEngine() *Engine {
 		e.board.whitePieces = topSidePieces
 		e.board.blackPieces = bottomSidePieces
 
-		e.board.blackPieces.king = 0X0000000000000010
-		e.board.blackPieces.queen = 0X0000000000000008
+		e.board.blackPieces.king = 0X0000000000000008
+		e.board.blackPieces.queen = 0X0000000000000010
 
 		e.board.whitePieces.king = e.board.blackPieces.king << 56
 		e.board.whitePieces.queen = e.board.blackPieces.queen << 56
@@ -133,16 +134,42 @@ func (e *Engine) GetBitBoardForSquare(x, y int) (pieceInfo *PieceInfo, err error
 }
 
 func (e *Engine) GenerateLegalMoves(piece PieceInfo) (uint64, error) {
-	
+
+	switch piece.piece {
+	case Pawn:
+		return e.GeneratePawnMoves(piece)
+
+	case Rook:
+		return e.GenerateLateralMoves(piece)
+
+	case Knight:
+		return e.GenerateKnightMoves(piece)
+
+	case Bishop:
+		return e.GenerateDiagonalMoves(piece)
+
+	case Queen:
+		lateralMask, latErr := e.GenerateLateralMoves(piece)
+		diagonalMask, digErr := e.GenerateDiagonalMoves(piece)
+
+		if latErr != nil || digErr != nil {
+			return uint64(0), errors.New(latErr.Error() + " " + digErr.Error())
+		}
+
+		return lateralMask | diagonalMask, nil
+
+	case King:
+		return e.GenerateKingMoves(piece)
+
+	}
+
 	return uint64(0), nil
 }
 
 
 func (e *Engine) GenerateMoves(piece PieceInfo, directions [][2]int) (uint64, error) {
 	
-	// reverse-engineer the position from the mask
-	x := int(piece.mask % 8)
-	y := int(piece.mask / 8)
+	x, y, _ := MaskToSpace(piece.mask)
 
 	moves := uint64(0)
 	
@@ -215,26 +242,154 @@ func (e *Engine) GenerateLateralMoves(piece PieceInfo) (uint64, error) {
 	return e.GenerateMoves(piece, directions)
 }
 
-
-func (e *Engine) GeneratePawnMoves(piece PieceInfo) (uint64, error) {
+func (e *Engine) GenerateKnightMoves(piece PieceInfo) (uint64, error) {
 	
+	directions := [][2]int{
+		{1, 2},
+		{-1, 2},
+		{-2, 1},
+		{-2, -1},
+		{1, -2},
+		{-1, -2},
+		{2, -1},
+		{2, 1},
+	}
+	
+	return e.GenerateDirectMoves(piece, directions)
+}
 
-	// I need to figure out how to make captures move differently
-	// also figure out how to make directions work properly
-	//
-	// i.e white does not always mean down or up moving pawns
 
+func (e *Engine) GenerateKingMoves(piece PieceInfo) (uint64, error) {
+	
 	directions := [][2]int{
 		{0, 1},
+		{-1, 1},
+		{-1, 0},
+		{-1, -1},
+		{0, -1},
+		{1, -1},
+		{1, 0},
+		{1, 1},
+	}
+	
+	return e.GenerateDirectMoves(piece, directions)
+}
+
+
+func (e *Engine) GenerateDirectMoves(piece PieceInfo, directions [][2]int) (uint64, error) {
+
+
+	mask := uint64(0)
+
+	x, y, _ := MaskToSpace(piece.mask)
+	
+	
+	var (
+		occupancy uint64
+	)
+
+	if piece.isWhite {
+		occupancy = WhiteOccupancy()
+	} else {
+		occupancy = BlackOccupancy()
 	}
 
-	return e.GenerateMoves(piece, directions)
+
+	for _, dir := range directions {
+		if move, err := SpaceToMask(x + dir[0], y + dir[1]); err != nil {
+			continue // this is probably wrap around
+		} else {
+			if move & occupancy != 0 {
+				continue
+			}
+
+			mask |= move
+			
+		}
+	}
+
+	return mask, nil
+
+}
+
+func (e *Engine) GeneratePawnMoves(piece PieceInfo) (uint64, error) {
+
+	baseDirection := -1
+
+	if (playAsWhite && !piece.isWhite) || (!playAsWhite && piece.isWhite) {
+		baseDirection = 1
+	}
+
+	directions := [][2]int{
+		{0, baseDirection},
+	}
+
+	captures := [][2]int{
+		{1, baseDirection},
+		{-1, baseDirection},
+	}
+
+	x, y, _ := MaskToSpace(piece.mask)
+
+	canMoveTwice := (piece.isWhite && y == 6) || (!piece.isWhite && y == 1)
+
+	if canMoveTwice {
+		directions = append(directions, [2]int{0, baseDirection * 2})
+	}
+
+	// actually start checking and adding to a mask
+	
+	mask := uint64(0)
+
+	
+	occupancy := Occupancy()
+
+	var enemyOccupancy uint64
+
+	if piece.isWhite {
+		enemyOccupancy = BlackOccupancy()
+	} else {
+		enemyOccupancy = WhiteOccupancy()
+	}
+
+
+	// check moves
+	for _, dir := range directions {
+		if move, err := SpaceToMask(x + dir[0], y + dir[1]); err != nil {
+			continue;
+			// in this case we continue and don't return
+			// this could be saving us from a wrap-around
+			//return uint64(0), err
+		} else {
+			if move & occupancy != 0 {
+				continue
+			}
+
+			mask |= move
+		}
+	}
+
+	// check captures
+	for _, dir := range captures {
+		if move, err := SpaceToMask(x + dir[0], y + dir[1]); err != nil {
+			continue
+			//return uint64(0), err
+		} else {
+			if move & enemyOccupancy == 0 {
+				continue
+			}
+
+			mask |= move
+		}
+	}
+
+
+	return mask, nil
 }
 
 
 
 func SpaceToMask(x, y int) (uint64, error) {
-
 	if x >= 8 || x < 0 || y >= 8 || y < 0 {
 		err := errors.New("Coordinates for bit board out of bounds")
 		return uint64(0), err
@@ -243,6 +398,24 @@ func SpaceToMask(x, y int) (uint64, error) {
 	mask := uint64(1) << ((7-y)*8 + x)
 
 	return mask, nil
+}
+
+func MaskToSpace(mask uint64) (int, int, error) {
+
+	if mask == 0 {
+		return 0, 0, errors.New("Mask is empty")
+	}
+
+	if mask&(mask-1) != 0 {
+		return 0, 0, errors.New("Mask has more than one bit set")
+	}
+
+	square := bits.TrailingZeros64(mask)
+
+	x := square % 8
+	y := 7 - (square / 8)
+
+	return x, y, nil
 }
 
 func WhiteOccupancy() uint64 {
@@ -261,4 +434,8 @@ func BlackOccupancy() uint64 {
 		engine.board.blackPieces.bishops|
 		engine.board.blackPieces.queen|
 		engine.board.blackPieces.king
+}
+
+func Occupancy() uint64 {
+	return WhiteOccupancy() | BlackOccupancy()
 }
