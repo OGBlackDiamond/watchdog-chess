@@ -14,21 +14,19 @@ import (
 
 type Graphics struct {
 	darkSquare *ebiten.Image
+	lightSquare *ebiten.Image // to cover pieces
 	pieceTiles *ebiten.Image
 
 	cursorPiece PieceInfo
-	drawOnCursor bool
-
-	drawLegalMoves bool
 }
 
 func NewGraphics() *Graphics {
 
-	drawOnCursor := false
-	drawLegalMoves := false
-
 	darkSquare := ebiten.NewImage(int(tileSize), int(tileSize))
 	darkSquare.Fill(color.RGBA{50, 50, 75, 255})
+
+	lightSquare := ebiten.NewImage(int(tileSize), int(tileSize))
+	lightSquare.Fill(color.RGBA{225, 170, 40, 255})
 
 	// decode an image from the image file's byte slice.
 	img, _, err := ebitenutil.NewImageFromFile("assets/chess-pieces.png")
@@ -37,8 +35,7 @@ func NewGraphics() *Graphics {
 	}
 	pieceTiles := ebiten.NewImageFromImage(img)
 
-	return &Graphics{darkSquare: darkSquare, pieceTiles: pieceTiles,
-		drawOnCursor: drawOnCursor, drawLegalMoves: drawLegalMoves}
+	return &Graphics{darkSquare: darkSquare, lightSquare: lightSquare, pieceTiles: pieceTiles}
 }
 
 func (g *Graphics) DrawBoard(screen *ebiten.Image) {
@@ -110,23 +107,24 @@ func (g *Graphics) DrawPieces(screen *ebiten.Image, pieces *Pieces, isWhite bool
 	}
 }
 
+func (g *Graphics) DrawPieceCoverup(screen *ebiten.Image) error {
+	op := &ebiten.DrawImageOptions{}
+	op.GeoM.Translate(float64(dragX)*tileSize, float64(dragY)*tileSize)
+
+	square := g.lightSquare
+
+	if IsDarkSquare(dragX, dragY) {
+		square = graphics.darkSquare
+	}
+
+	screen.DrawImage(square, op)
+
+	return nil
+}
+
 func (g *Graphics) DrawPieceOnCursor(piece PieceInfo) {
 	g.cursorPiece = piece
-	g.drawOnCursor = true
 }
-
-func (g *Graphics) StopDrawingPieceOnCursor() {
-	g.drawOnCursor = false
-}
-
-func (g *Graphics) StartDrawingLegalMoves() {
-	g.drawLegalMoves = true
-}
-
-func (g *Graphics) StopDrawingLegalMoves() {
-	g.drawLegalMoves = false
-}
-
 
 func (g *Graphics) DrawCursorPiece(screen *ebiten.Image) error {
 
@@ -239,4 +237,12 @@ func (g *Graphics) DrawCapture(screen *ebiten.Image, x, y int) error {
 	)
 
 	return nil
+}
+
+func IsDarkSquare(x, y int) bool {
+	if playAsWhite {
+		return (x+y)%2 != 0
+	}
+
+	return (x+y)%2 == 0
 }

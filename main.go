@@ -40,10 +40,9 @@ func (g *Game) Draw(screen *ebiten.Image) {
 	graphics.DrawBoard(screen)
 	graphics.DrawPieces(screen, &engine.board.blackPieces, false)
 	graphics.DrawPieces(screen, &engine.board.whitePieces, true)
-	if graphics.drawOnCursor {
+	if isDragging {
+		graphics.DrawPieceCoverup(screen)
 		graphics.DrawCursorPiece(screen)
-	}
-	if graphics.drawLegalMoves {
 		graphics.DrawLegalMoves(screen)
 	}
 

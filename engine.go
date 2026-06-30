@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"math/bits"
 )
 
@@ -84,20 +85,88 @@ func NewEngine() *Engine {
 		e.board.whitePieces.king = e.board.blackPieces.king << 56
 		e.board.whitePieces.queen = e.board.blackPieces.queen << 56
 
-	}
+}
 
 	return e
 }
 
-func (e *Engine) GetBitBoardForSquare(x, y int) (pieceInfo *PieceInfo, err error) {
 
-	err = nil
-	pieceInfo = &PieceInfo{
-		nil,
-		NONE,
-		false,
-		uint64(0),
+func (e *Engine) MakeMove(fromX, fromY int, toX, toY int) (bool, error) {
+
+	if CheckBounds(fromX, fromY) || CheckBounds(toX, toY){
+		return false, errors.New("Square out of bounds")
 	}
+
+	if fromX == toX && fromY == toY {
+		return false, errors.New("No move to make")
+	}
+
+	fromPiece, fromErr := e.GetBitBoardForSquare(fromX, fromY)
+
+	if fromErr != nil {
+		return false, errors.New("MakeMove() failed with error: " + fromErr.Error())
+	}
+
+	var friendlyOccupancy uint64
+
+	if fromPiece.isWhite {
+		friendlyOccupancy = WhiteOccupancy()
+	} else {
+		friendlyOccupancy = BlackOccupancy()
+	}
+
+
+	// TODO: Make this check actually mean something
+	// (check for turns)
+	if fromPiece.mask & friendlyOccupancy == 0 {
+		return false, errors.New("MakeMove() failed with error: friendly piece not selected")
+	}
+
+	toPiece, toErr := e.GetBitBoardForSquare(toX, toY)
+
+	toIsEmpty := false
+
+	if toErr != nil {
+		if toPiece != nil {
+			// we landed on a square with no piece
+			// we need to manually generate the mask for it here
+			toPiece.mask, _ = SpaceToMask(toX, toY)
+			toIsEmpty = true
+		} else {
+			return false, errors.New("MakeMove() failed with error: " + toErr.Error())
+		}
+	}
+
+	legalMoves, err := e.GenerateLegalMoves(*fromPiece)
+
+	if err != nil {
+		return false, errors.New("MakeMove() failed with error: " + err.Error())
+	}
+
+	if toPiece.mask & legalMoves == 0 {
+		return false, errors.New("MakeMove() failed with error: illegal move")
+	}
+
+	if toPiece.mask & friendlyOccupancy == 0 {
+		
+		// empty space or a capture
+		// we'll have to actually do the checks here but yk
+		*fromPiece.bitboard &^= fromPiece.mask
+		*fromPiece.bitboard |= toPiece.mask
+		if !toIsEmpty {
+			*toPiece.bitboard &^= toPiece.mask
+		}
+
+		return true, nil
+	}
+
+	return false, nil
+}
+
+
+func (e *Engine) GetBitBoardForSquare(x, y int) (*PieceInfo, error) {
+
+	pieceInfo := &PieceInfo{}
 
 	bitboards := []*uint64 {
 		&e.board.blackPieces.pawns,
@@ -116,21 +185,24 @@ func (e *Engine) GetBitBoardForSquare(x, y int) (pieceInfo *PieceInfo, err error
 	}
 
 
-	if pieceInfo.mask, err = SpaceToMask(x, y); err != nil {
-		return
+	mask, err := SpaceToMask(x, y)
+
+	if err != nil {
+		return nil, err
 	}
 
 	for piece, bb := range bitboards {
 		// hit
-		if *bb & pieceInfo.mask != 0 {
+		if *bb & mask != 0 {
+			pieceInfo.mask = mask
 			pieceInfo.bitboard = bb
 			pieceInfo.piece = Piece(piece % 6)
 			pieceInfo.isWhite = piece > 5
-			return
+			return pieceInfo, nil
 		}
 	}
 
-	return
+	return pieceInfo, errors.New("Square is empty")
 }
 
 func (e *Engine) GenerateLegalMoves(piece PieceInfo) (uint64, error) {
@@ -169,7 +241,12 @@ func (e *Engine) GenerateLegalMoves(piece PieceInfo) (uint64, error) {
 
 func (e *Engine) GenerateMoves(piece PieceInfo, directions [][2]int) (uint64, error) {
 	
-	x, y, _ := MaskToSpace(piece.mask)
+	x, y, err := MaskToSpace(piece.mask)
+
+	if err != nil {
+		fmt.Println("GenerateMoves() failed with: " + err.Error())
+		return uint64(0), err
+	}
 
 	moves := uint64(0)
 	
@@ -193,7 +270,7 @@ func (e *Engine) GenerateMoves(piece PieceInfo, directions [][2]int) (uint64, er
 		file := x + df
 		rank := y + dr
 
-		for file >= 0 && file < 8 && rank >= 0 && rank < 8 {
+		for !CheckBounds(file, rank) {
 			if mask, err := SpaceToMask(file, rank); err != nil {
 				return uint64(0), err
 			} else {
@@ -331,7 +408,8 @@ func (e *Engine) GeneratePawnMoves(piece PieceInfo) (uint64, error) {
 
 	x, y, _ := MaskToSpace(piece.mask)
 
-	canMoveTwice := (piece.isWhite && y == 6) || (!piece.isWhite && y == 1)
+	canMoveTwice := playAsWhite && ((piece.isWhite && y == 6) || (!piece.isWhite && y == 1)) ||
+		!playAsWhite && ((!piece.isWhite && y == 6) || (piece.isWhite && y == 1))
 
 	if canMoveTwice {
 		directions = append(directions, [2]int{0, baseDirection * 2})
@@ -390,7 +468,7 @@ func (e *Engine) GeneratePawnMoves(piece PieceInfo) (uint64, error) {
 
 
 func SpaceToMask(x, y int) (uint64, error) {
-	if x >= 8 || x < 0 || y >= 8 || y < 0 {
+	if CheckBounds(x, y) {
 		err := errors.New("Coordinates for bit board out of bounds")
 		return uint64(0), err
 	}
@@ -438,4 +516,8 @@ func BlackOccupancy() uint64 {
 
 func Occupancy() uint64 {
 	return WhiteOccupancy() | BlackOccupancy()
+}
+
+func CheckBounds(x, y int) bool {
+	return x > 7 || x < 0 || y > 7 || y < 0
 }

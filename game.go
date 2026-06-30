@@ -13,64 +13,54 @@ import (
 
 var (
 	dragX, dragY int
-	bitmapInEffect *uint64
-	clickMask uint64
-
+	isDragging bool = false
 	clickLegalMoves uint64
 )
 
 func handleLeftPress() error {
 	dragX, dragY = ebiten.CursorPosition()
 
-	fmt.Printf("%d, %d\n", dragX/int(tileSize), dragY/int(tileSize))
-
 	dragX /= int(tileSize)
 	dragY /= int(tileSize)
 
-	pieceInfo, err := engine.GetBitBoardForSquare(dragX, dragY)
+	fmt.Printf("%d, %d\n", dragX, dragY)
 
-	if err != nil {
-		// uh idk
-		return err
+	pieceInfo, bbErr := engine.GetBitBoardForSquare(dragX, dragY)
+
+	if bbErr != nil {
+		fmt.Println(bbErr.Error())
+		return bbErr
 	}
-	if pieceInfo.bitboard == nil {
-		return err
+
+	legalMoves, legalMovesErr := engine.GenerateLegalMoves(*pieceInfo)
+
+	if legalMovesErr != nil {
+		fmt.Println(legalMovesErr.Error())
+		return legalMovesErr
 	}
 
-	bitmapInEffect = pieceInfo.bitboard
-	clickMask = pieceInfo.mask
-
-	*bitmapInEffect ^= clickMask
-
-	clickLegalMoves, _ = engine.GenerateLegalMoves(*pieceInfo)
+	clickLegalMoves = legalMoves
 
 	graphics.DrawPieceOnCursor(*pieceInfo)
-	graphics.StartDrawingLegalMoves()
+	isDragging = true
 
 	return nil
 }
 
 func handleLeftRelease() error {
 	
-	graphics.StopDrawingPieceOnCursor()
-	graphics.StopDrawingLegalMoves()
+	isDragging = false
 
 	x, y := ebiten.CursorPosition()
 
 	x /= int(tileSize)
 	y /= int(tileSize)
 
+	_, err := engine.MakeMove(dragX, dragY, x, y)
 
-	if x != dragX || y != dragY {
-		if bitmapInEffect == nil {
-			return nil
-		}
-
-		makeMask := uint64(1) << ((7-y) * 8 + x)
-
-		*bitmapInEffect ^= makeMask
-	} else {
-		*bitmapInEffect ^= clickMask
+	if err != nil {
+		fmt.Println(err.Error())
+		return err
 	}
 
 	return nil
