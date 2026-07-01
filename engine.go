@@ -3,11 +3,20 @@ package main
 import (
 	"errors"
 	"fmt"
+	"math"
 	"math/bits"
 )
 
 type Engine struct{
 	board Board
+
+	whiteCanCastleKingSide  bool
+	whiteCanCastleQueenSide bool
+	blackCanCastleKingSide  bool
+	blackCanCastleQueenSide bool
+
+	enPassantTarget uint64
+	enPassantPieceMask uint64
 }
 
 type Board struct{
@@ -85,7 +94,16 @@ func NewEngine() *Engine {
 		e.board.whitePieces.king = e.board.blackPieces.king << 56
 		e.board.whitePieces.queen = e.board.blackPieces.queen << 56
 
-}
+	}
+
+	e.blackCanCastleKingSide = true
+	e.blackCanCastleQueenSide = true
+
+	e.whiteCanCastleKingSide = true
+	e.whiteCanCastleQueenSide = true
+
+	e.enPassantTarget = uint64(0)
+	e.enPassantPieceMask = uint64(0)
 
 	return e
 }
@@ -157,10 +175,156 @@ func (e *Engine) MakeMove(fromX, fromY int, toX, toY int) (bool, error) {
 			*toPiece.bitboard &^= toPiece.mask
 		}
 
+
+		e.makeConditionalMove(*fromPiece, fromX, fromY, toX, toY)
+		e.updateConditionalMoveState(*fromPiece, fromX, fromY)
+
 		return true, nil
 	}
 
 	return false, nil
+}
+
+func (e *Engine) makeConditionalMove(piece PieceInfo, fromX, fromY, toX, toY int) error {
+	
+	switch piece.piece {
+
+	case King:
+
+		castleDirection := float64(toX - fromX)
+		// we castled
+		if math.Abs(castleDirection) == 2 {
+
+			rookX := 0
+
+
+			// castling to the right, so right side rook
+			if castleDirection > 0 {
+				rookX = 7
+			}
+
+			castleRookMask, err := SpaceToMask(rookX, toY)
+
+			if err != nil {
+				return err
+			}
+
+			rookToMask, toErr := SpaceToMask(toX - int(castleDirection/2), toY)
+
+			if toErr != nil {
+				return toErr
+			}
+			
+			// the castling rook is white
+			if e.board.whitePieces.rooks & castleRookMask != 0 {
+				e.board.whitePieces.rooks &^= castleRookMask
+				e.board.whitePieces.rooks |= rookToMask
+			} else {
+				e.board.blackPieces.rooks &^= castleRookMask
+				e.board.blackPieces.rooks |= rookToMask
+			}
+		}
+
+	case Pawn:
+
+		if piece.isWhite {
+			// if en passant happened
+			if e.board.whitePieces.pawns & e.enPassantTarget != 0 {
+				e.board.blackPieces.pawns &^= e.enPassantPieceMask
+			}
+		} else {
+			// if en passant happened
+			if e.board.blackPieces.pawns & e.enPassantTarget != 0 {
+				e.board.whitePieces.pawns &^= e.enPassantPieceMask
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (e *Engine) updateConditionalMoveState(piece PieceInfo, x, y int) error {
+
+	switch piece.piece {
+
+	case Pawn:
+		// we return instead of breaking becuase the enPassantTarget is reset at the end of this function
+		// we don't want that to happen if the pawn actually moved
+		return nil
+	
+	// remove castling rights if the king moves
+	case King :
+		if piece.isWhite {
+			e.whiteCanCastleKingSide = false
+			e.whiteCanCastleQueenSide = false
+		} else {
+			e.blackCanCastleKingSide = false
+			e.blackCanCastleQueenSide = false
+		}
+
+	case Rook :
+		// check if a rook is in any of the corners first
+		bottom := y == 7
+		top := y == 0
+		left := x == 0
+		right := x == 7
+
+		if top {
+			// if the piece is not friendly, it shouldn't be on top
+			if piece.isWhite == playAsWhite {
+				break
+			}
+
+			if left {
+				if playAsWhite {
+					e.blackCanCastleQueenSide = false
+				} else {
+					e.whiteCanCastleKingSide = false
+				}
+			} else if right {
+				if playAsWhite {
+					e.blackCanCastleKingSide = false
+				} else {
+					e.whiteCanCastleQueenSide = false
+				}
+			} else {
+				break
+			}
+
+		} else if bottom {
+			// if the piece is friendly, it should be on bottom
+			if piece.isWhite != playAsWhite {
+				break
+			}
+
+			if left {
+				if playAsWhite {
+					e.whiteCanCastleQueenSide = false
+				} else {
+					e.blackCanCastleKingSide = false
+				}
+			} else if right {
+				if playAsWhite {
+					e.whiteCanCastleKingSide = false
+				} else {
+					e.blackCanCastleQueenSide = false
+				}
+			} else {
+				break
+			}
+
+		} else {
+			// do nothing, rook isn't in a corner
+			break
+		}
+
+	}
+
+	e.enPassantTarget = uint64(0)
+	e.enPassantPieceMask = uint64(0)
+
+	return nil
 }
 
 
@@ -348,8 +512,48 @@ func (e *Engine) GenerateKingMoves(piece PieceInfo) (uint64, error) {
 		{1, 0},
 		{1, 1},
 	}
-	
-	return e.GenerateDirectMoves(piece, directions)
+
+	// get the mask for the base moves
+	moveMask, err := e.GenerateDirectMoves(piece, directions)
+
+	if err != nil {
+		return uint64(0), err
+	}
+
+	// define moveset for castling
+	castles := [][2]int {}
+
+	// flip caslting direction if board is flipped
+	sideModifier := -1
+
+	if playAsWhite {
+		sideModifier = 1
+	}
+
+	if piece.isWhite {
+		if e.whiteCanCastleQueenSide {
+			castles = append(castles, [2]int{-2 * sideModifier, 0})
+		}
+		if e.whiteCanCastleKingSide {
+			castles = append(castles, [2]int{2 * sideModifier, 0})
+		}
+	} else {
+		if e.blackCanCastleQueenSide {
+			castles = append(castles, [2]int{-2 * sideModifier, 0})
+		}
+		if e.blackCanCastleKingSide {
+			castles = append(castles, [2]int{2 * sideModifier, 0})
+		}
+	}
+
+	castleMask, castleErr := e.GenerateDirectMoves(piece, castles)
+
+	if castleErr != nil {
+		return uint64(0), err
+	}
+
+
+	return moveMask | castleMask, nil
 }
 
 
@@ -432,15 +636,24 @@ func (e *Engine) GeneratePawnMoves(piece PieceInfo) (uint64, error) {
 
 
 	// check moves
-	for _, dir := range directions {
+	for step, dir := range directions {
 		if move, err := SpaceToMask(x + dir[0], y + dir[1]); err != nil {
-			continue;
 			// in this case we continue and don't return
 			// this could be saving us from a wrap-around
-			//return uint64(0), err
+			continue;
 		} else {
 			if move & occupancy != 0 {
 				continue
+			}
+
+			// if the first step was blocked
+			if step == 1 && mask == 0 {
+				continue
+			// if we are allowed to make a second move,
+			// set enPassantTarget to the square behind the pawn
+			} else {
+				e.enPassantTarget = mask
+				e.enPassantPieceMask = move
 			}
 
 			mask |= move
@@ -451,9 +664,8 @@ func (e *Engine) GeneratePawnMoves(piece PieceInfo) (uint64, error) {
 	for _, dir := range captures {
 		if move, err := SpaceToMask(x + dir[0], y + dir[1]); err != nil {
 			continue
-			//return uint64(0), err
 		} else {
-			if move & enemyOccupancy == 0 {
+			if move & enemyOccupancy == 0 && move & e.enPassantTarget == 0 {
 				continue
 			}
 
