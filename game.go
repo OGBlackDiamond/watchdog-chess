@@ -32,7 +32,7 @@ func handleLeftPress() error {
 		return bbErr
 	}
 
-	legalMoves, legalMovesErr := engine.GenerateLegalMoves(*pieceInfo)
+	legalMoves, legalMovesErr := engine.GenerateLegalMovesForPiece(*pieceInfo)
 
 	if legalMovesErr != nil {
 		fmt.Println(legalMovesErr.Error())

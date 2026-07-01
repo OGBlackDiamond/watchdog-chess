@@ -155,7 +155,7 @@ func (e *Engine) MakeMove(fromX, fromY int, toX, toY int) (bool, error) {
 		}
 	}
 
-	legalMoves, err := e.GenerateLegalMoves(*fromPiece)
+	legalMoves, err := e.GenerateLegalMovesForPiece(*fromPiece)
 
 	if err != nil {
 		return false, errors.New("MakeMove() failed with error: " + err.Error())
@@ -369,7 +369,7 @@ func (e *Engine) GetBitBoardForSquare(x, y int) (*PieceInfo, error) {
 	return pieceInfo, errors.New("Square is empty")
 }
 
-func (e *Engine) GenerateLegalMoves(piece PieceInfo) (uint64, error) {
+func (e *Engine) GenerateLegalMovesForPiece(piece PieceInfo) (uint64, error) {
 
 	switch piece.piece {
 	case Pawn:
@@ -403,62 +403,6 @@ func (e *Engine) GenerateLegalMoves(piece PieceInfo) (uint64, error) {
 }
 
 
-func (e *Engine) GenerateMoves(piece PieceInfo, directions [][2]int) (uint64, error) {
-	
-	x, y, err := MaskToSpace(piece.mask)
-
-	if err != nil {
-		fmt.Println("GenerateMoves() failed with: " + err.Error())
-		return uint64(0), err
-	}
-
-	moves := uint64(0)
-	
-	var (
-		occupancy uint64
-		enemyOccupancy uint64
-	)
-
-	if piece.isWhite {
-		occupancy = WhiteOccupancy()
-		enemyOccupancy = BlackOccupancy()
-	} else {
-		occupancy = BlackOccupancy()
-		enemyOccupancy = WhiteOccupancy()
-	}
-
-	for _, dir := range directions {
-		df := dir[0]
-		dr := dir[1]
-
-		file := x + df
-		rank := y + dr
-
-		for !CheckBounds(file, rank) {
-			if mask, err := SpaceToMask(file, rank); err != nil {
-				return uint64(0), err
-			} else {
-
-				if occupancy & mask != 0 {
-					break
-				}
-
-				moves |= mask
-
-				if enemyOccupancy & mask != 0 {
-					break
-				}
-
-				file += df
-				rank += dr
-
-			}
-		}
-	}
-
-	return moves, nil
-}
-
 func (e *Engine) GenerateDiagonalMoves(piece PieceInfo) (uint64, error) {
 	
 	directions := [][2]int{
@@ -468,7 +412,7 @@ func (e *Engine) GenerateDiagonalMoves(piece PieceInfo) (uint64, error) {
 		{-1, -1}, // southwest
 	}
 
-	return e.GenerateMoves(piece, directions)
+	return e.GenerateRangeMoves(piece, directions)
 }
 
 func (e *Engine) GenerateLateralMoves(piece PieceInfo) (uint64, error) {
@@ -480,7 +424,7 @@ func (e *Engine) GenerateLateralMoves(piece PieceInfo) (uint64, error) {
 		{0, -1},  // south
 	}
 
-	return e.GenerateMoves(piece, directions)
+	return e.GenerateRangeMoves(piece, directions)
 }
 
 func (e *Engine) GenerateKnightMoves(piece PieceInfo) (uint64, error) {
@@ -554,43 +498,6 @@ func (e *Engine) GenerateKingMoves(piece PieceInfo) (uint64, error) {
 
 
 	return moveMask | castleMask, nil
-}
-
-
-func (e *Engine) GenerateDirectMoves(piece PieceInfo, directions [][2]int) (uint64, error) {
-
-
-	mask := uint64(0)
-
-	x, y, _ := MaskToSpace(piece.mask)
-	
-	
-	var (
-		occupancy uint64
-	)
-
-	if piece.isWhite {
-		occupancy = WhiteOccupancy()
-	} else {
-		occupancy = BlackOccupancy()
-	}
-
-
-	for _, dir := range directions {
-		if move, err := SpaceToMask(x + dir[0], y + dir[1]); err != nil {
-			continue // this is probably wrap around
-		} else {
-			if move & occupancy != 0 {
-				continue
-			}
-
-			mask |= move
-			
-		}
-	}
-
-	return mask, nil
-
 }
 
 func (e *Engine) GeneratePawnMoves(piece PieceInfo) (uint64, error) {
@@ -675,6 +582,100 @@ func (e *Engine) GeneratePawnMoves(piece PieceInfo) (uint64, error) {
 
 
 	return mask, nil
+}
+
+
+
+func (e *Engine) GenerateDirectMoves(piece PieceInfo, directions [][2]int) (uint64, error) {
+
+
+	mask := uint64(0)
+
+	x, y, _ := MaskToSpace(piece.mask)
+	
+	
+	var (
+		occupancy uint64
+	)
+
+	if piece.isWhite {
+		occupancy = WhiteOccupancy()
+	} else {
+		occupancy = BlackOccupancy()
+	}
+
+
+	for _, dir := range directions {
+		if move, err := SpaceToMask(x + dir[0], y + dir[1]); err != nil {
+			continue // this is probably wrap around
+		} else {
+			if move & occupancy != 0 {
+				continue
+			}
+
+			mask |= move
+			
+		}
+	}
+
+	return mask, nil
+
+}
+
+func (e *Engine) GenerateRangeMoves(piece PieceInfo, directions [][2]int) (uint64, error) {
+	
+	x, y, err := MaskToSpace(piece.mask)
+
+	if err != nil {
+		fmt.Println("GenerateRangeMoves() failed with: " + err.Error())
+		return uint64(0), err
+	}
+
+	moves := uint64(0)
+	
+	var (
+		occupancy uint64
+		enemyOccupancy uint64
+	)
+
+	if piece.isWhite {
+		occupancy = WhiteOccupancy()
+		enemyOccupancy = BlackOccupancy()
+	} else {
+		occupancy = BlackOccupancy()
+		enemyOccupancy = WhiteOccupancy()
+	}
+
+	for _, dir := range directions {
+		df := dir[0]
+		dr := dir[1]
+
+		file := x + df
+		rank := y + dr
+
+		for !CheckBounds(file, rank) {
+			if mask, err := SpaceToMask(file, rank); err != nil {
+				return uint64(0), err
+			} else {
+
+				if occupancy & mask != 0 {
+					break
+				}
+
+				moves |= mask
+
+				if enemyOccupancy & mask != 0 {
+					break
+				}
+
+				file += df
+				rank += dr
+
+			}
+		}
+	}
+
+	return moves, nil
 }
 
 
