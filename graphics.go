@@ -158,6 +158,7 @@ func (g *Graphics) DrawLegalMoves(screen *ebiten.Image) error {
 		}
 
 		x, y, _ := MaskToSpace(mask)
+
 		if Occupancy() & mask == 0 {
 			g.DrawMoveDot(screen, x, y)
 		} else {
@@ -177,7 +178,7 @@ func (g *Graphics) DrawLegalMoves(screen *ebiten.Image) error {
 */
 func (g *Graphics) GetPiece(piece int, color int) (*ebiten.Image, error) {
 
-	if piece > 5 || piece < 0 || color > 1 || piece < 0 {
+	if piece > 5 || piece < 0 || color > 1 || color < 0 {
 		return nil, errors.New("Piece request out of bounds")
 	}
 

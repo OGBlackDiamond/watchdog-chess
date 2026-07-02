@@ -7,7 +7,7 @@ import (
 	"math/bits"
 )
 
-type Engine struct{
+type Engine struct {
 	board Board
 
 	whiteCanCastleKingSide  bool
@@ -15,26 +15,27 @@ type Engine struct{
 	blackCanCastleKingSide  bool
 	blackCanCastleQueenSide bool
 
-	enPassantTarget uint64
+	enPassantTarget    uint64
 	enPassantPieceMask uint64
 }
 
-type Board struct{
+type Board struct {
 	whitePieces Pieces
 	blackPieces Pieces
 }
 
-type Pieces struct{
-	pawns uint64
-	rooks uint64
+type Pieces struct {
+	pawns   uint64
+	rooks   uint64
 	knights uint64
 	bishops uint64
-	queen uint64
-	king uint64
+	queen   uint64
+	king    uint64
 }
 
 // struct for pieces
 type Piece int
+
 const (
 	Pawn Piece = iota
 	Rook
@@ -47,9 +48,9 @@ const (
 
 type PieceInfo struct {
 	bitboard *uint64
-	piece Piece
-	isWhite bool
-	mask uint64
+	piece    Piece
+	isWhite  bool
+	mask     uint64
 }
 
 func NewEngine() *Engine {
@@ -59,7 +60,6 @@ func NewEngine() *Engine {
 
 	e.board.whitePieces = Pieces{}
 	e.board.blackPieces = Pieces{}
-
 
 	topSidePieces := Pieces{}
 	bottomSidePieces := Pieces{}
@@ -78,8 +78,8 @@ func NewEngine() *Engine {
 		e.board.whitePieces = bottomSidePieces
 		e.board.blackPieces = topSidePieces
 
-		e.board.whitePieces.king = 0X0000000000000010
-		e.board.whitePieces.queen = 0X0000000000000008
+		e.board.whitePieces.king = 0x0000000000000010
+		e.board.whitePieces.queen = 0x0000000000000008
 
 		e.board.blackPieces.king = e.board.whitePieces.king << 56
 		e.board.blackPieces.queen = e.board.whitePieces.queen << 56
@@ -88,8 +88,8 @@ func NewEngine() *Engine {
 		e.board.whitePieces = topSidePieces
 		e.board.blackPieces = bottomSidePieces
 
-		e.board.blackPieces.king = 0X0000000000000008
-		e.board.blackPieces.queen = 0X0000000000000010
+		e.board.blackPieces.king = 0x0000000000000008
+		e.board.blackPieces.queen = 0x0000000000000010
 
 		e.board.whitePieces.king = e.board.blackPieces.king << 56
 		e.board.whitePieces.queen = e.board.blackPieces.queen << 56
@@ -108,10 +108,9 @@ func NewEngine() *Engine {
 	return e
 }
 
-
 func (e *Engine) MakeMove(fromX, fromY int, toX, toY int) (bool, error) {
 
-	if CheckBounds(fromX, fromY) || CheckBounds(toX, toY){
+	if CheckBounds(fromX, fromY) || CheckBounds(toX, toY) {
 		return false, errors.New("Square out of bounds")
 	}
 
@@ -133,10 +132,9 @@ func (e *Engine) MakeMove(fromX, fromY int, toX, toY int) (bool, error) {
 		friendlyOccupancy = BlackOccupancy()
 	}
 
-
 	// TODO: Make this check actually mean something
 	// (check for turns)
-	if fromPiece.mask & friendlyOccupancy == 0 {
+	if fromPiece.mask&friendlyOccupancy == 0 {
 		return false, errors.New("MakeMove() failed with error: friendly piece not selected")
 	}
 
@@ -161,12 +159,12 @@ func (e *Engine) MakeMove(fromX, fromY int, toX, toY int) (bool, error) {
 		return false, errors.New("MakeMove() failed with error: " + err.Error())
 	}
 
-	if toPiece.mask & legalMoves == 0 {
+	if toPiece.mask&legalMoves == 0 {
 		return false, errors.New("MakeMove() failed with error: illegal move")
 	}
 
-	if toPiece.mask & friendlyOccupancy == 0 {
-		
+	if toPiece.mask&friendlyOccupancy == 0 {
+
 		// empty space or a capture
 		// we'll have to actually do the checks here but yk
 		*fromPiece.bitboard &^= fromPiece.mask
@@ -174,7 +172,6 @@ func (e *Engine) MakeMove(fromX, fromY int, toX, toY int) (bool, error) {
 		if !toIsEmpty {
 			*toPiece.bitboard &^= toPiece.mask
 		}
-
 
 		e.makeConditionalMove(*fromPiece, fromX, fromY, toX, toY)
 		e.updateConditionalMoveState(*fromPiece, fromX, fromY)
@@ -186,7 +183,7 @@ func (e *Engine) MakeMove(fromX, fromY int, toX, toY int) (bool, error) {
 }
 
 func (e *Engine) makeConditionalMove(piece PieceInfo, fromX, fromY, toX, toY int) error {
-	
+
 	switch piece.piece {
 
 	case King:
@@ -196,7 +193,6 @@ func (e *Engine) makeConditionalMove(piece PieceInfo, fromX, fromY, toX, toY int
 		if math.Abs(castleDirection) == 2 {
 
 			rookX := 0
-
 
 			// castling to the right, so right side rook
 			if castleDirection > 0 {
@@ -209,14 +205,14 @@ func (e *Engine) makeConditionalMove(piece PieceInfo, fromX, fromY, toX, toY int
 				return err
 			}
 
-			rookToMask, toErr := SpaceToMask(toX - int(castleDirection/2), toY)
+			rookToMask, toErr := SpaceToMask(toX-int(castleDirection/2), toY)
 
 			if toErr != nil {
 				return toErr
 			}
-			
+
 			// the castling rook is white
-			if e.board.whitePieces.rooks & castleRookMask != 0 {
+			if e.board.whitePieces.rooks&castleRookMask != 0 {
 				e.board.whitePieces.rooks &^= castleRookMask
 				e.board.whitePieces.rooks |= rookToMask
 			} else {
@@ -229,12 +225,14 @@ func (e *Engine) makeConditionalMove(piece PieceInfo, fromX, fromY, toX, toY int
 
 		if piece.isWhite {
 			// if en passant happened
-			if e.board.whitePieces.pawns & e.enPassantTarget != 0 {
+			if e.board.whitePieces.pawns&e.enPassantTarget != 0 {
+				fmt.Println("EN PASSANT")
 				e.board.blackPieces.pawns &^= e.enPassantPieceMask
 			}
 		} else {
 			// if en passant happened
-			if e.board.blackPieces.pawns & e.enPassantTarget != 0 {
+			if e.board.blackPieces.pawns&e.enPassantTarget != 0 {
+				fmt.Println("EN PASSANT")
 				e.board.whitePieces.pawns &^= e.enPassantPieceMask
 			}
 		}
@@ -252,9 +250,9 @@ func (e *Engine) updateConditionalMoveState(piece PieceInfo, x, y int) error {
 		// we return instead of breaking becuase the enPassantTarget is reset at the end of this function
 		// we don't want that to happen if the pawn actually moved
 		return nil
-	
+
 	// remove castling rights if the king moves
-	case King :
+	case King:
 		if piece.isWhite {
 			e.whiteCanCastleKingSide = false
 			e.whiteCanCastleQueenSide = false
@@ -263,7 +261,7 @@ func (e *Engine) updateConditionalMoveState(piece PieceInfo, x, y int) error {
 			e.blackCanCastleQueenSide = false
 		}
 
-	case Rook :
+	case Rook:
 		// check if a rook is in any of the corners first
 		bottom := y == 7
 		top := y == 0
@@ -327,12 +325,11 @@ func (e *Engine) updateConditionalMoveState(piece PieceInfo, x, y int) error {
 	return nil
 }
 
-
 func (e *Engine) GetBitBoardForSquare(x, y int) (*PieceInfo, error) {
 
 	pieceInfo := &PieceInfo{}
 
-	bitboards := []*uint64 {
+	bitboards := []*uint64{
 		&e.board.blackPieces.pawns,
 		&e.board.blackPieces.rooks,
 		&e.board.blackPieces.knights,
@@ -348,7 +345,6 @@ func (e *Engine) GetBitBoardForSquare(x, y int) (*PieceInfo, error) {
 		&e.board.whitePieces.king,
 	}
 
-
 	mask, err := SpaceToMask(x, y)
 
 	if err != nil {
@@ -357,7 +353,7 @@ func (e *Engine) GetBitBoardForSquare(x, y int) (*PieceInfo, error) {
 
 	for piece, bb := range bitboards {
 		// hit
-		if *bb & mask != 0 {
+		if *bb&mask != 0 {
 			pieceInfo.mask = mask
 			pieceInfo.bitboard = bb
 			pieceInfo.piece = Piece(piece % 6)
@@ -402,9 +398,8 @@ func (e *Engine) GenerateLegalMovesForPiece(piece PieceInfo) (uint64, error) {
 	return uint64(0), nil
 }
 
-
 func (e *Engine) GenerateDiagonalMoves(piece PieceInfo) (uint64, error) {
-	
+
 	directions := [][2]int{
 		{1, 1},   // northeast
 		{-1, 1},  // northwest
@@ -416,19 +411,19 @@ func (e *Engine) GenerateDiagonalMoves(piece PieceInfo) (uint64, error) {
 }
 
 func (e *Engine) GenerateLateralMoves(piece PieceInfo) (uint64, error) {
-	
+
 	directions := [][2]int{
-		{1, 0},   // east
-		{-1, 0},  // west
-		{0, 1},   // north
-		{0, -1},  // south
+		{1, 0},  // east
+		{-1, 0}, // west
+		{0, 1},  // north
+		{0, -1}, // south
 	}
 
 	return e.GenerateRangeMoves(piece, directions)
 }
 
 func (e *Engine) GenerateKnightMoves(piece PieceInfo) (uint64, error) {
-	
+
 	directions := [][2]int{
 		{1, 2},
 		{-1, 2},
@@ -439,13 +434,12 @@ func (e *Engine) GenerateKnightMoves(piece PieceInfo) (uint64, error) {
 		{2, -1},
 		{2, 1},
 	}
-	
+
 	return e.GenerateDirectMoves(piece, directions)
 }
 
-
 func (e *Engine) GenerateKingMoves(piece PieceInfo) (uint64, error) {
-	
+
 	directions := [][2]int{
 		{0, 1},
 		{-1, 1},
@@ -464,8 +458,14 @@ func (e *Engine) GenerateKingMoves(piece PieceInfo) (uint64, error) {
 		return uint64(0), err
 	}
 
+	x, y, err := MaskToSpace(piece.mask)
+
+	if err != nil {
+		return uint64(0), err
+	}
+
 	// define moveset for castling
-	castles := [][2]int {}
+	castles := [][2]int{}
 
 	// flip caslting direction if board is flipped
 	sideModifier := -1
@@ -475,17 +475,17 @@ func (e *Engine) GenerateKingMoves(piece PieceInfo) (uint64, error) {
 	}
 
 	if piece.isWhite {
-		if e.whiteCanCastleQueenSide {
+		if e.whiteCanCastleQueenSide && CastlePathClear(x, y, 0) {
 			castles = append(castles, [2]int{-2 * sideModifier, 0})
 		}
-		if e.whiteCanCastleKingSide {
+		if e.whiteCanCastleKingSide && CastlePathClear(x, y, 7) {
 			castles = append(castles, [2]int{2 * sideModifier, 0})
 		}
 	} else {
-		if e.blackCanCastleQueenSide {
+		if e.blackCanCastleQueenSide && CastlePathClear(x, y, 0) {
 			castles = append(castles, [2]int{-2 * sideModifier, 0})
 		}
-		if e.blackCanCastleKingSide {
+		if e.blackCanCastleKingSide && CastlePathClear(x, y, 7) {
 			castles = append(castles, [2]int{2 * sideModifier, 0})
 		}
 	}
@@ -496,8 +496,31 @@ func (e *Engine) GenerateKingMoves(piece PieceInfo) (uint64, error) {
 		return uint64(0), err
 	}
 
-
 	return moveMask | castleMask, nil
+}
+
+func CastlePathClear(kingX, y, rookX int) bool {
+	step := 1
+
+	if rookX < kingX {
+		step = -1
+	}
+
+	occupancy := Occupancy()
+
+	for x := kingX + step; x != rookX; x += step {
+		mask, err := SpaceToMask(x, y)
+
+		if err != nil {
+			return false
+		}
+
+		if occupancy&mask != 0 {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (e *Engine) GeneratePawnMoves(piece PieceInfo) (uint64, error) {
@@ -527,10 +550,9 @@ func (e *Engine) GeneratePawnMoves(piece PieceInfo) (uint64, error) {
 	}
 
 	// actually start checking and adding to a mask
-	
+
 	mask := uint64(0)
 
-	
 	occupancy := Occupancy()
 
 	var enemyOccupancy uint64
@@ -541,24 +563,24 @@ func (e *Engine) GeneratePawnMoves(piece PieceInfo) (uint64, error) {
 		enemyOccupancy = WhiteOccupancy()
 	}
 
-
 	// check moves
 	for step, dir := range directions {
-		if move, err := SpaceToMask(x + dir[0], y + dir[1]); err != nil {
+		if move, err := SpaceToMask(x+dir[0], y+dir[1]); err != nil {
 			// in this case we continue and don't return
 			// this could be saving us from a wrap-around
-			continue;
+			continue
 		} else {
-			if move & occupancy != 0 {
+			if move&occupancy != 0 {
 				continue
 			}
 
 			// if the first step was blocked
-			if step == 1 && mask == 0 {
-				continue
-			// if we are allowed to make a second move,
-			// set enPassantTarget to the square behind the pawn
-			} else {
+			if step == 1 {
+				if mask == 0 {
+					continue
+				}
+				// if we are allowed to make a second move,
+				// set enPassantTarget to the square behind the pawn
 				e.enPassantTarget = mask
 				e.enPassantPieceMask = move
 			}
@@ -569,10 +591,10 @@ func (e *Engine) GeneratePawnMoves(piece PieceInfo) (uint64, error) {
 
 	// check captures
 	for _, dir := range captures {
-		if move, err := SpaceToMask(x + dir[0], y + dir[1]); err != nil {
+		if move, err := SpaceToMask(x+dir[0], y+dir[1]); err != nil {
 			continue
 		} else {
-			if move & enemyOccupancy == 0 && move & e.enPassantTarget == 0 {
+			if move&enemyOccupancy == 0 && move&e.enPassantTarget == 0 {
 				continue
 			}
 
@@ -580,20 +602,15 @@ func (e *Engine) GeneratePawnMoves(piece PieceInfo) (uint64, error) {
 		}
 	}
 
-
 	return mask, nil
 }
 
-
-
 func (e *Engine) GenerateDirectMoves(piece PieceInfo, directions [][2]int) (uint64, error) {
-
 
 	mask := uint64(0)
 
 	x, y, _ := MaskToSpace(piece.mask)
-	
-	
+
 	var (
 		occupancy uint64
 	)
@@ -604,17 +621,16 @@ func (e *Engine) GenerateDirectMoves(piece PieceInfo, directions [][2]int) (uint
 		occupancy = BlackOccupancy()
 	}
 
-
 	for _, dir := range directions {
-		if move, err := SpaceToMask(x + dir[0], y + dir[1]); err != nil {
+		if move, err := SpaceToMask(x+dir[0], y+dir[1]); err != nil {
 			continue // this is probably wrap around
 		} else {
-			if move & occupancy != 0 {
+			if move&occupancy != 0 {
 				continue
 			}
 
 			mask |= move
-			
+
 		}
 	}
 
@@ -623,7 +639,7 @@ func (e *Engine) GenerateDirectMoves(piece PieceInfo, directions [][2]int) (uint
 }
 
 func (e *Engine) GenerateRangeMoves(piece PieceInfo, directions [][2]int) (uint64, error) {
-	
+
 	x, y, err := MaskToSpace(piece.mask)
 
 	if err != nil {
@@ -632,9 +648,9 @@ func (e *Engine) GenerateRangeMoves(piece PieceInfo, directions [][2]int) (uint6
 	}
 
 	moves := uint64(0)
-	
+
 	var (
-		occupancy uint64
+		occupancy      uint64
 		enemyOccupancy uint64
 	)
 
@@ -658,13 +674,13 @@ func (e *Engine) GenerateRangeMoves(piece PieceInfo, directions [][2]int) (uint6
 				return uint64(0), err
 			} else {
 
-				if occupancy & mask != 0 {
+				if occupancy&mask != 0 {
 					break
 				}
 
 				moves |= mask
 
-				if enemyOccupancy & mask != 0 {
+				if enemyOccupancy&mask != 0 {
 					break
 				}
 
@@ -677,8 +693,6 @@ func (e *Engine) GenerateRangeMoves(piece PieceInfo, directions [][2]int) (uint6
 
 	return moves, nil
 }
-
-
 
 func SpaceToMask(x, y int) (uint64, error) {
 	if CheckBounds(x, y) {
@@ -711,19 +725,19 @@ func MaskToSpace(mask uint64) (int, int, error) {
 
 func WhiteOccupancy() uint64 {
 	return engine.board.whitePieces.pawns |
-		engine.board.whitePieces.rooks|
-		engine.board.whitePieces.knights|
-		engine.board.whitePieces.bishops|
-		engine.board.whitePieces.queen|
+		engine.board.whitePieces.rooks |
+		engine.board.whitePieces.knights |
+		engine.board.whitePieces.bishops |
+		engine.board.whitePieces.queen |
 		engine.board.whitePieces.king
 }
 
 func BlackOccupancy() uint64 {
 	return engine.board.blackPieces.pawns |
-		engine.board.blackPieces.rooks|
-		engine.board.blackPieces.knights|
-		engine.board.blackPieces.bishops|
-		engine.board.blackPieces.queen|
+		engine.board.blackPieces.rooks |
+		engine.board.blackPieces.knights |
+		engine.board.blackPieces.bishops |
+		engine.board.blackPieces.queen |
 		engine.board.blackPieces.king
 }
 
