@@ -4,6 +4,7 @@ import (
 	_ "image/png"
 	"log"
 
+	chessengine "github.com/OGBlackDiamond/watchdog-chess/engine"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	//"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -19,8 +20,8 @@ const (
 )
 
 var (
-	graphics *Graphics = NewGraphics()
-	engine *Engine = NewEngine()
+	graphics *Graphics           = NewGraphics()
+	engine   *chessengine.Engine = chessengine.NewEngine(playAsWhite)
 )
 
 type Game struct{}
@@ -38,8 +39,8 @@ func (g *Game) Update() error {
 
 func (g *Game) Draw(screen *ebiten.Image) {
 	graphics.DrawBoard(screen)
-	graphics.DrawPieces(screen, &engine.board.blackPieces, false)
-	graphics.DrawPieces(screen, &engine.board.whitePieces, true)
+	graphics.DrawPieces(screen, &engine.Board.BlackPieces, false)
+	graphics.DrawPieces(screen, &engine.Board.WhitePieces, true)
 	if isDragging {
 		graphics.DrawPieceCoverup(screen)
 		graphics.DrawCursorPiece(screen)
@@ -55,7 +56,7 @@ func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
 
 func main() {
 	g := &Game{}
-	ebiten.SetWindowSize(screenWidth * 3, screenHeight * 3)
+	ebiten.SetWindowSize(screenWidth*3, screenHeight*3)
 	ebiten.SetWindowTitle("Watchdog Chess")
 	if err := ebiten.RunGame(g); err != nil {
 		log.Fatal(err)

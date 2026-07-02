@@ -6,6 +6,7 @@ import (
 	"image/color"
 	"log"
 
+	chessengine "github.com/OGBlackDiamond/watchdog-chess/engine"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
 	"github.com/hajimehoshi/ebiten/v2/vector"
@@ -13,11 +14,11 @@ import (
 )
 
 type Graphics struct {
-	darkSquare *ebiten.Image
+	darkSquare  *ebiten.Image
 	lightSquare *ebiten.Image // to cover pieces
-	pieceTiles *ebiten.Image
+	pieceTiles  *ebiten.Image
 
-	cursorPiece PieceInfo
+	cursorPiece chessengine.PieceInfo
 }
 
 func NewGraphics() *Graphics {
@@ -45,10 +46,10 @@ func (g *Graphics) DrawBoard(screen *ebiten.Image) {
 		for j := 0; j < 4; j++ {
 			op := &ebiten.DrawImageOptions{}
 
-			checker_offset := (j*2)+(i%2)
+			checker_offset := (j * 2) + (i % 2)
 
 			if playAsWhite {
-				checker_offset = (j*2)+((i+1)%2)
+				checker_offset = (j * 2) + ((i + 1) % 2)
 			}
 
 			op.GeoM.Translate(
@@ -61,15 +62,15 @@ func (g *Graphics) DrawBoard(screen *ebiten.Image) {
 	}
 }
 
-func (g *Graphics) DrawPieces(screen *ebiten.Image, pieces *Pieces, isWhite bool) {
+func (g *Graphics) DrawPieces(screen *ebiten.Image, pieces *chessengine.Pieces, isWhite bool) {
 
-	bitboards := []uint64 {
-		pieces.pawns,
-		pieces.rooks,
-		pieces.knights,
-		pieces.bishops,
-		pieces.queen,
-		pieces.king,
+	bitboards := []uint64{
+		pieces.Pawns,
+		pieces.Rooks,
+		pieces.Knights,
+		pieces.Bishops,
+		pieces.Queen,
+		pieces.King,
 	}
 
 	for piece, bitboard := range bitboards {
@@ -101,7 +102,7 @@ func (g *Graphics) DrawPieces(screen *ebiten.Image, pieces *Pieces, isWhite bool
 			}
 
 			op := &ebiten.DrawImageOptions{}
-			op.GeoM.Translate(float64(x)*tileSize, float64(y)*tileSize - tileSize / float64(tile_offset))
+			op.GeoM.Translate(float64(x)*tileSize, float64(y)*tileSize-tileSize/float64(tile_offset))
 			screen.DrawImage(pieceImg, op)
 		}
 	}
@@ -122,7 +123,7 @@ func (g *Graphics) DrawPieceCoverup(screen *ebiten.Image) error {
 	return nil
 }
 
-func (g *Graphics) DrawPieceOnCursor(piece PieceInfo) {
+func (g *Graphics) DrawPieceOnCursor(piece chessengine.PieceInfo) {
 	g.cursorPiece = piece
 }
 
@@ -130,11 +131,11 @@ func (g *Graphics) DrawCursorPiece(screen *ebiten.Image) error {
 
 	isWhite := 0
 
-	if (g.cursorPiece.isWhite) {
+	if g.cursorPiece.IsWhite {
 		isWhite = 1
 	}
 
-	image, err := g.GetPiece(int(g.cursorPiece.piece), isWhite)
+	image, err := g.GetPiece(int(g.cursorPiece.Piece), isWhite)
 
 	if err != nil {
 		return err
@@ -143,7 +144,7 @@ func (g *Graphics) DrawCursorPiece(screen *ebiten.Image) error {
 	x, y := ebiten.CursorPosition()
 
 	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Translate(float64(x) - tileSize / 2.0, float64(y) - tileSize / 2.0)
+	op.GeoM.Translate(float64(x)-tileSize/2.0, float64(y)-tileSize/2.0)
 	screen.DrawImage(image, op)
 
 	return nil
@@ -152,14 +153,14 @@ func (g *Graphics) DrawCursorPiece(screen *ebiten.Image) error {
 func (g *Graphics) DrawLegalMoves(screen *ebiten.Image) error {
 
 	for square := 0; square < 64; square++ {
-		mask := uint64(1)<<square
+		mask := uint64(1) << square
 		if clickLegalMoves&mask == 0 {
 			continue
 		}
 
-		x, y, _ := MaskToSpace(mask)
+		x, y, _ := chessengine.MaskToSpace(mask)
 
-		if Occupancy() & mask == 0 {
+		if engine.Occupancy()&mask == 0 {
 			g.DrawMoveDot(screen, x, y)
 		} else {
 			g.DrawCapture(screen, x, y)
@@ -175,7 +176,7 @@ func (g *Graphics) DrawLegalMoves(screen *ebiten.Image) error {
 * 0 pawn, 1 rook, 2 knight, 3 bishop, 4 queen, 5 king
 * row:
 * 0 blue, 1 yellow
-*/
+ */
 func (g *Graphics) GetPiece(piece int, color int) (*ebiten.Image, error) {
 
 	if piece > 5 || piece < 0 || color > 1 || color < 0 {
@@ -194,7 +195,6 @@ func (g *Graphics) GetPiece(piece int, color int) (*ebiten.Image, error) {
 
 	return pieceImg, nil
 }
-
 
 func (g *Graphics) DrawMoveDot(screen *ebiten.Image, x, y int) error {
 
@@ -217,7 +217,6 @@ func (g *Graphics) DrawMoveDot(screen *ebiten.Image, x, y int) error {
 	return nil
 }
 
-
 func (g *Graphics) DrawCapture(screen *ebiten.Image, x, y int) error {
 
 	if x >= 8 || x < 0 || y >= 8 || y < 0 {
@@ -231,7 +230,7 @@ func (g *Graphics) DrawCapture(screen *ebiten.Image, x, y int) error {
 		screen,
 		centerX,
 		centerY,
-		float32(tileSize / 2),
+		float32(tileSize/2),
 		3,
 		color.RGBA{0, 0, 0, 120},
 		true,

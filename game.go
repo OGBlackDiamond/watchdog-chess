@@ -12,8 +12,8 @@ import (
  */
 
 var (
-	dragX, dragY int
-	isDragging bool = false
+	dragX, dragY    int
+	isDragging      bool = false
 	clickLegalMoves uint64
 )
 
@@ -25,18 +25,18 @@ func handleLeftPress() error {
 
 	fmt.Printf("%d, %d\n", dragX, dragY)
 
-	pieceInfo, bbErr := engine.GetBitBoardForSquare(dragX, dragY)
+	pieceInfo, err := engine.GetBitBoardForSquare(dragX, dragY)
 
-	if bbErr != nil {
-		fmt.Println(bbErr.Error())
-		return bbErr
+	if err != nil {
+		fmt.Println(err.Error())
+		return err
 	}
 
-	legalMoves, legalMovesErr := engine.GenerateLegalMovesForPiece(*pieceInfo)
+	legalMoves, err := engine.GenerateLegalMovesForPiece(*pieceInfo)
 
-	if legalMovesErr != nil {
-		fmt.Println(legalMovesErr.Error())
-		return legalMovesErr
+	if err != nil {
+		fmt.Println(err.Error())
+		return err
 	}
 
 	clickLegalMoves = legalMoves
@@ -48,7 +48,7 @@ func handleLeftPress() error {
 }
 
 func handleLeftRelease() error {
-	
+
 	isDragging = false
 
 	x, y := ebiten.CursorPosition()
