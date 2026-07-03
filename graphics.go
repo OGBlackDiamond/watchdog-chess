@@ -46,7 +46,6 @@ func (g *Graphics) DrawBoard(screen *ebiten.Image) {
 		for j := range 4 {
 			op := &ebiten.DrawImageOptions{}
 
-
 			checker_offset := (j * 2) + ((i + 1) % 2)
 
 			op.GeoM.Translate(
@@ -90,6 +89,7 @@ func (g *Graphics) DrawPieces(screen *ebiten.Image, pieces *chessengine.Pieces, 
 
 			x := square % 8
 			y := 7 - (square / 8)
+			x, y = boardToScreen(x, y)
 
 			tile_offset := 20
 
@@ -107,11 +107,12 @@ func (g *Graphics) DrawPieces(screen *ebiten.Image, pieces *chessengine.Pieces, 
 
 func (g *Graphics) DrawPieceCoverup(screen *ebiten.Image) error {
 	op := &ebiten.DrawImageOptions{}
-	op.GeoM.Translate(float64(dragX)*tileSize, float64(dragY)*tileSize)
+	x, y := boardToScreen(dragX, dragY)
+	op.GeoM.Translate(float64(x)*tileSize, float64(y)*tileSize)
 
 	square := g.lightSquare
 
-	if IsDarkSquare(dragX, dragY) {
+	if IsDarkSquare(x, y) {
 		square = graphics.darkSquare
 	}
 
@@ -149,20 +150,21 @@ func (g *Graphics) DrawCursorPiece(screen *ebiten.Image) error {
 
 func (g *Graphics) DrawLegalMoves(screen *ebiten.Image) error {
 
-	for square := 0; square < 64; square++ {
-		mask := uint64(1) << square
-		if clickLegalMoves&mask == 0 {
-			continue
+
+	for _, move := range clickLegalMoves {
+		mask, err := chessengine.SpaceToMask(move.ToX, move.ToY)
+
+		if err != nil {
+			return nil
 		}
 
-		x, y, _ := chessengine.MaskToSpace(mask)
+		move.ToX, move.ToY = boardToScreen(move.ToX, move.ToY)
 
 		if engine.Occupancy()&mask == 0 {
-			g.DrawMoveDot(screen, x, y)
+			g.DrawMoveDot(screen, move.ToX, move.ToY)
 		} else {
-			g.DrawCapture(screen, x, y)
+			g.DrawCapture(screen, move.ToX, move.ToY)
 		}
-
 	}
 
 	return nil
@@ -237,9 +239,5 @@ func (g *Graphics) DrawCapture(screen *ebiten.Image, x, y int) error {
 }
 
 func IsDarkSquare(x, y int) bool {
-	if playAsWhite {
-		return (x+y)%2 != 0
-	}
-
-	return (x+y)%2 == 0
+	return (x+y)%2 != 0
 }

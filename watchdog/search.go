@@ -26,10 +26,10 @@ func ChooseMove(e *engine.Engine, depth int, whiteToMove bool) (engine.Move, boo
 
 	for _, move := range moves {
 		child := *e
-		if _, err := child.MakeMove(move); err != nil {
+		if _, err := child.MakeMoveUnchecked(move); err != nil {
 			return engine.Move{}, false, err
 		}
-		score, err := Negamax(&child, depth - 1, math.Inf(-1), math.Inf(1), !whiteToMove)
+		score, err := Negamax(&child, depth-1, math.Inf(-1), math.Inf(1), !whiteToMove)
 		score *= -1 //negamaxxing
 
 		if err != nil {
@@ -65,14 +65,13 @@ func Negamax(e *engine.Engine, depth int, alpha float64, beta float64, whiteToMo
 		return 0, nil // stalemate
 	}
 
-	
 	for _, move := range moves {
 		child := *e
 		if _, err := child.MakeMove(move); err != nil {
 			return 0, err
 		}
 
-		score, err := Negamax(&child, depth - 1, -beta, -alpha, !whiteToMove)
+		score, err := Negamax(&child, depth-1, -beta, -alpha, !whiteToMove)
 		score *= -1 //negamaxxing
 
 		if err != nil {

@@ -15,20 +15,21 @@ import (
 var (
 	dragX, dragY    int
 	isDragging      bool = false
-	clickLegalMoves uint64
+	clickLegalMoves []chessengine.Move
 
-	playAsWhite = false 
+	playAsWhite = false
 
 	whiteToMove bool = true
 )
 
 func handleLeftPress() error {
-	dragX, dragY = ebiten.CursorPosition()
+	screenX, screenY := ebiten.CursorPosition()
 
-	dragX /= int(tileSize)
-	dragY /= int(tileSize)
+	screenX /= int(tileSize)
+	screenY /= int(tileSize)
+	dragX, dragY = screenToBoard(screenX, screenY)
 
-	fmt.Printf("%d, %d\n", dragX, dragY)
+	fmt.Printf("screen: %d, %d board: %d, %d\n", screenX, screenY, dragX, dragY)
 
 	pieceInfo, err := engine.GetBitBoardForSquare(dragX, dragY)
 
@@ -37,14 +38,12 @@ func handleLeftPress() error {
 		return err
 	}
 
-	legalMoves, err := engine.GenerateLegalMovesForPiece(*pieceInfo)
+	clickLegalMoves = make([]chessengine.Move, 0, 64)
 
-	if err != nil {
+	if err := engine.GenerateLegalMovesForPiece(*pieceInfo, &clickLegalMoves); err != nil {
 		fmt.Println(err.Error())
 		return err
 	}
-
-	clickLegalMoves = legalMoves
 
 	graphics.DrawPieceOnCursor(*pieceInfo)
 	isDragging = true
@@ -56,10 +55,11 @@ func handleLeftRelease() error {
 
 	isDragging = false
 
-	x, y := ebiten.CursorPosition()
+	screenX, screenY := ebiten.CursorPosition()
 
-	x /= int(tileSize)
-	y /= int(tileSize)
+	screenX /= int(tileSize)
+	screenY /= int(tileSize)
+	x, y := screenToBoard(screenX, screenY)
 
 	_, err := engine.MakeMove(chessengine.Move{FromX: dragX, FromY: dragY, ToX: x, ToY: y})
 
@@ -72,4 +72,20 @@ func handleLeftRelease() error {
 	whiteToMove = !whiteToMove
 
 	return nil
+}
+
+func screenToBoard(x, y int) (int, int) {
+	if playAsWhite {
+		return x, y
+	}
+
+	return 7 - x, 7 - y
+}
+
+func boardToScreen(x, y int) (int, int) {
+	if playAsWhite {
+		return x, y
+	}
+
+	return 7 - x, 7 - y
 }

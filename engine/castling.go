@@ -1,6 +1,21 @@
 package engine
 
 func (e *Engine) CastlePathLegal(kingX, y, rookX int, IsWhite bool) bool {
+	rookMask, err := SpaceToMask(rookX, y)
+	if err != nil {
+		return false
+	}
+
+	if IsWhite {
+		if e.Board.WhitePieces.Rooks&rookMask == 0 {
+			return false
+		}
+	} else {
+		if e.Board.BlackPieces.Rooks&rookMask == 0 {
+			return false
+		}
+	}
+
 	if !e.CastlePathClear(kingX, y, rookX) {
 		return false
 	}

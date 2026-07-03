@@ -3,9 +3,11 @@ package engine
 import (
 	"errors"
 	"math"
+	"slices"
 )
 
 func (e *Engine) MakeMove(move Move) (bool, error) {
+	move = normalizeMove(move)
 
 	if CheckBounds(move.FromX, move.FromY) || CheckBounds(move.ToX, move.ToY) {
 		return false, errors.New("square out of bounds")
@@ -50,28 +52,30 @@ func (e *Engine) MakeMove(move Move) (bool, error) {
 		}
 	}
 
-	legalMoves, err := e.GenerateLegalMovesForPiece(*fromPiece)
+	legalMoves := make([]Move, 0, 64)
 
-	if err != nil {
+	if err := e.GenerateLegalMovesForPiece(*fromPiece, &legalMoves); err != nil {
 		return false, errors.New("MakeMove() failed with error: " + err.Error())
 	}
 
-	if toPiece.Mask&legalMoves == 0 {
+	if !slices.Contains(legalMoves, move) {
 		return false, errors.New("MakeMove() failed with error: illegal move")
 	}
 
 	if toPiece.Mask&friendlyOccupancy == 0 {
 
-		// empty space or a capture
-		// we'll have to actually do the checks here but yk
 		*fromPiece.Bitboard &^= fromPiece.Mask
 		*fromPiece.Bitboard |= toPiece.Mask
 		if !toIsEmpty {
 			*toPiece.Bitboard &^= toPiece.Mask
 		}
 
-		e.makeConditionalMove(*fromPiece, move)
-		e.updateConditionalMoveState(*fromPiece, move)
+		if err := e.makeConditionalMove(*fromPiece, move); err != nil {
+			return false, err
+		}
+		if err := e.updateConditionalMoveState(*fromPiece, move); err != nil {
+			return false, err
+		}
 
 		return true, nil
 	}
@@ -108,8 +112,7 @@ func (e *Engine) makeConditionalMove(piece PieceInfo, move Move) error {
 				return toErr
 			}
 
-			// the castling rook is white
-			if e.Board.WhitePieces.Rooks&castleRookMask != 0 {
+			if piece.IsWhite {
 				e.Board.WhitePieces.Rooks &^= castleRookMask
 				e.Board.WhitePieces.Rooks |= rookToMask
 			} else {
@@ -119,6 +122,25 @@ func (e *Engine) makeConditionalMove(piece PieceInfo, move Move) error {
 		}
 
 	case Pawn:
+
+		if move.Promotion != NONE {
+			if !validPromotionPiece(move.Promotion) {
+				return errors.New("invalid promotion piece")
+			}
+
+			toMask, err := SpaceToMask(move.ToX, move.ToY)
+			if err != nil {
+				return err
+			}
+
+			promotionBitboard := e.pieceBitboard(move.Promotion, piece.IsWhite)
+			if promotionBitboard == nil {
+				return errors.New("invalid promotion piece")
+			}
+
+			*piece.Bitboard &^= toMask
+			*promotionBitboard |= toMask
+		}
 
 		if piece.IsWhite {
 			// if en passant happened
@@ -135,6 +157,35 @@ func (e *Engine) makeConditionalMove(piece PieceInfo, move Move) error {
 	}
 
 	return nil
+}
+
+// gets the bitboard for a piece
+func (e *Engine) pieceBitboard(piece Piece, isWhite bool) *uint64 {
+	pieces := &e.Board.BlackPieces
+	if isWhite {
+		pieces = &e.Board.WhitePieces
+	}
+
+	switch piece {
+	case Pawn:
+		return &pieces.Pawns
+	case Rook:
+		return &pieces.Rooks
+	case Knight:
+		return &pieces.Knights
+	case Bishop:
+		return &pieces.Bishops
+	case Queen:
+		return &pieces.Queen
+	case King:
+		return &pieces.King
+	default:
+		return nil
+	}
+}
+
+func validPromotionPiece(piece Piece) bool {
+	return piece == Queen || piece == Rook || piece == Bishop || piece == Knight
 }
 
 func (e *Engine) updateConditionalMoveState(piece PieceInfo, move Move) error {
@@ -173,59 +224,18 @@ func (e *Engine) updateConditionalMoveState(piece PieceInfo, move Move) error {
 		}
 
 	case Rook:
-		// check if a rook is in any of the corners first
-		bottom := move.FromY == 7
-		top := move.FromY == 0
-		left := move.FromX == 0
-		right := move.FromX == 7
-
-		if top {
-			// if the piece is not friendly, it shouldn't be on top
-			if piece.IsWhite == e.PlayAsWhite {
-				break
+		if piece.IsWhite {
+			if move.FromX == 0 && move.FromY == 7 {
+				e.whiteCanCastleQueenSide = false
+			} else if move.FromX == 7 && move.FromY == 7 {
+				e.whiteCanCastleKingSide = false
 			}
-
-			if left {
-				if e.PlayAsWhite {
-					e.blackCanCastleQueenSide = false
-				} else {
-					e.whiteCanCastleKingSide = false
-				}
-			} else if right {
-				if e.PlayAsWhite {
-					e.blackCanCastleKingSide = false
-				} else {
-					e.whiteCanCastleQueenSide = false
-				}
-			} else {
-				break
-			}
-
-		} else if bottom {
-			// if the piece is friendly, it should be on bottom
-			if piece.IsWhite != e.PlayAsWhite {
-				break
-			}
-
-			if left {
-				if e.PlayAsWhite {
-					e.whiteCanCastleQueenSide = false
-				} else {
-					e.blackCanCastleKingSide = false
-				}
-			} else if right {
-				if e.PlayAsWhite {
-					e.whiteCanCastleKingSide = false
-				} else {
-					e.blackCanCastleQueenSide = false
-				}
-			} else {
-				break
-			}
-
 		} else {
-			// do nothing, rook isn't in a corner
-			break
+			if move.FromX == 0 && move.FromY == 0 {
+				e.blackCanCastleQueenSide = false
+			} else if move.FromX == 7 && move.FromY == 0 {
+				e.blackCanCastleKingSide = false
+			}
 		}
 
 	}
@@ -234,7 +244,8 @@ func (e *Engine) updateConditionalMoveState(piece PieceInfo, move Move) error {
 }
 
 // just mutates the Board, this is used for legal move checks in the future
-func (e *Engine) makeMoveUnchecked(move Move) (bool, error) {
+func (e *Engine) MakeMoveUnchecked(move Move) (bool, error) {
+	move = normalizeMove(move)
 
 	fromPiece, err := e.GetBitBoardForSquare(move.FromX, move.FromY)
 
@@ -261,10 +272,22 @@ func (e *Engine) makeMoveUnchecked(move Move) (bool, error) {
 		*toPiece.Bitboard &^= toPiece.Mask
 	}
 
-	e.makeConditionalMove(*fromPiece, move)
-	//e.updateConditionalMoveState(*fromPiece, move)
+	if err := e.makeConditionalMove(*fromPiece, move); err != nil {
+		return false, err
+	}
+	if err := e.updateConditionalMoveState(*fromPiece, move); err != nil {
+		return false, err
+	}
 
 	return true, nil
+}
+
+func normalizeMove(move Move) Move {
+	if move.Promotion == Pawn {
+		move.Promotion = NONE
+	}
+
+	return move
 }
 
 func (e *Engine) GetBitBoardForSquare(x, y int) (*PieceInfo, error) {

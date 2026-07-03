@@ -1,5 +1,7 @@
 package engine
 
+import "math/bits"
+
 func (e *Engine) KingIsChecked(IsWhite bool) bool {
 
 	kingMask := e.Board.WhitePieces.King
@@ -37,11 +39,8 @@ func (e *Engine) GenerateAttackMask(IsWhite bool) (uint64, error) {
 	}
 
 	for _, pieceBoard := range pieceBoards {
-		for mask := uint64(1); mask != 0; mask <<= 1 {
-			if pieceBoard.Board&mask == 0 {
-				continue
-			}
-
+		for board := pieceBoard.Board; board != 0; board &= board - 1 {
+			mask := board & -board
 			pieceInfo := PieceInfo{
 				Piece:   pieceBoard.Piece,
 				IsWhite: IsWhite,
@@ -61,24 +60,52 @@ func (e *Engine) GenerateAttackMask(IsWhite bool) (uint64, error) {
 }
 
 func (e *Engine) GenerateAttackMaskForPiece(piece PieceInfo) (uint64, error) {
-	if piece.Piece == King {
-		return e.GenerateKingAttackMask(piece)
+	fromSq := bits.TrailingZeros64(piece.Mask)
+
+	switch piece.Piece {
+	case Pawn:
+		return e.GeneratePawnAttackMask(piece), nil
+	case Rook:
+		return rookAttacks(fromSq, e.Occupancy()), nil
+	case Knight:
+		return knightAttacks[fromSq], nil
+	case Bishop:
+		return bishopAttacks(fromSq, e.Occupancy()), nil
+	case Queen:
+		occupancy := e.Occupancy()
+		return rookAttacks(fromSq, occupancy) | bishopAttacks(fromSq, occupancy), nil
+	case King:
+		return kingAttacks[fromSq], nil
 	}
 
-	return e.GeneratePseudoLegalMovesForPiece(piece)
+	return uint64(0), nil
 }
 
-func (e *Engine) GenerateKingAttackMask(piece PieceInfo) (uint64, error) {
-	directions := [][2]int{
-		{0, 1},
-		{-1, 1},
-		{-1, 0},
-		{-1, -1},
-		{0, -1},
-		{1, -1},
-		{1, 0},
-		{1, 1},
+func (e *Engine) GeneratePawnAttackMask(piece PieceInfo) uint64 {
+	x, y, err := MaskToSpace(piece.Mask)
+	if err != nil {
+		return 0
 	}
 
-	return e.GenerateDirectMoves(piece, directions)
+	direction := 1
+	if piece.IsWhite {
+		direction = -1
+	}
+
+	attacks := uint64(0)
+	for _, dx := range [2]int{-1, 1} {
+		toX := x + dx
+		toY := y + direction
+		if CheckBounds(toX, toY) {
+			continue
+		}
+
+		mask, err := SpaceToMask(toX, toY)
+		if err != nil {
+			return 0
+		}
+		attacks |= mask
+	}
+
+	return attacks
 }

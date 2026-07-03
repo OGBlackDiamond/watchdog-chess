@@ -1,8 +1,7 @@
 package engine
 
 import (
-	"errors"
-	"fmt"
+	"math/bits"
 )
 
 func (e *Engine) GenerateLegalMovesForPosition(whiteToMove bool) ([]Move, error) {
@@ -20,41 +19,20 @@ func (e *Engine) GenerateLegalMovesForPosition(whiteToMove bool) ([]Move, error)
 		pieces.King,
 	}
 
-	moves := []Move{}
+	moves := make([]Move, 0, 64)
 
 	for piece, bitboard := range bitboards {
-		for fromMask := uint64(1); fromMask != 0; fromMask <<= 1 {
-			if bitboard&fromMask == 0 {
-				continue
-			}
+		for bb := bitboard; bb != 0; bb &= bb - 1 {
+			fromMask := bb & -bb
 
-			fromX, fromY, err := MaskToSpace(fromMask)
-
-			if err != nil {
-				return nil, err
-			}
-
-			legalMask, err := e.GenerateLegalMovesForPiece(PieceInfo{
+			if err := e.GenerateLegalMovesForPiece(PieceInfo{
 				Piece:   Piece(piece),
 				IsWhite: whiteToMove,
 				Mask:    fromMask,
-			})
-
-			if err != nil {
+			},
+				&moves,
+			); err != nil {
 				return nil, err
-			}
-
-			for toMask := uint64(1); toMask != 0; toMask <<= 1 {
-				if legalMask&toMask == 0 {
-					continue
-				}
-
-				toX, toY, err := MaskToSpace(toMask)
-				if err != nil {
-					return nil, err
-				}
-
-				moves = append(moves, Move{FromX: fromX, FromY: fromY, ToX: toX, ToY: toY})
 			}
 		}
 	}
@@ -62,347 +40,270 @@ func (e *Engine) GenerateLegalMovesForPosition(whiteToMove bool) ([]Move, error)
 	return moves, nil
 }
 
-func (e *Engine) GenerateLegalMovesForPiece(piece PieceInfo) (uint64, error) {
-	pseudoLegalMoves, err := e.GeneratePseudoLegalMovesForPiece(piece)
-
-	if err != nil {
-		return uint64(0), err
-	}
-
-	legalMoves := uint64(0)
-
-	fromX, fromY, err := MaskToSpace(piece.Mask)
-
-	if err != nil {
-		return uint64(0), err
-	}
-
-	// loop over all spaces that have a psuedo legal move
-	for mask := uint64(1); mask != 0; mask <<= 1 {
-		if pseudoLegalMoves&mask == 0 {
-			continue
-		}
-
-		toX, toY, err := MaskToSpace(mask)
-
-		if err != nil {
-			return uint64(0), err
-		}
-
-		copy := *e
-		_, err = copy.makeMoveUnchecked(Move{FromX: fromX, FromY: fromY, ToX: toX, ToY: toY})
-		if err != nil {
-			continue
-		}
-
-		if copy.KingIsChecked(piece.IsWhite) {
-			continue
-		}
-
-		legalMoves |= mask
-
-	}
-
-	return legalMoves, nil
-}
-
-func (e *Engine) GeneratePseudoLegalMovesForPiece(piece PieceInfo) (uint64, error) {
+func (e *Engine) GenerateLegalMovesForPiece(piece PieceInfo, moves *[]Move) error {
 
 	switch piece.Piece {
 	case Pawn:
-		return e.GeneratePawnMoves(piece)
+		return e.GeneratePawnMoves(piece, moves)
 
 	case Rook:
-		return e.GenerateLateralMoves(piece)
+		return e.GenerateLateralMoves(piece, moves)
 
 	case Knight:
-		return e.GenerateKnightMoves(piece)
+		return e.GenerateKnightMoves(piece, moves)
 
 	case Bishop:
-		return e.GenerateDiagonalMoves(piece)
+		return e.GenerateDiagonalMoves(piece, moves)
 
 	case Queen:
-		lateralMask, latErr := e.GenerateLateralMoves(piece)
-		diagonalMask, digErr := e.GenerateDiagonalMoves(piece)
-
-		if latErr != nil || digErr != nil {
-			return uint64(0), errors.New(latErr.Error() + " " + digErr.Error())
+		if err := e.GenerateLateralMoves(piece, moves); err != nil {
+			return err
 		}
 
-		return lateralMask | diagonalMask, nil
+		if err := e.GenerateDiagonalMoves(piece, moves); err != nil {
+			return err
+		}
+
+		return nil
 
 	case King:
-		return e.GenerateKingMoves(piece)
-
+		return e.GenerateKingMoves(piece, moves)
 	}
 
-	return uint64(0), nil
+	return nil
 }
 
-func (e *Engine) GenerateDiagonalMoves(piece PieceInfo) (uint64, error) {
-
-	directions := [][2]int{
-		{1, 1},   // northeast
-		{-1, 1},  // northwest
-		{1, -1},  // southeast
-		{-1, -1}, // southwest
+func (e *Engine) GenerateDiagonalMoves(piece PieceInfo, moves *[]Move) error {
+	fromSq := bits.TrailingZeros64(piece.Mask)
+	friendly := e.BlackOccupancy()
+	if piece.IsWhite {
+		friendly = e.WhiteOccupancy()
 	}
 
-	return e.GenerateRangeMoves(piece, directions)
+	return e.addLegalMovesFromMask(piece, bishopAttacks(fromSq, e.Occupancy())&^friendly, moves)
 }
 
-func (e *Engine) GenerateLateralMoves(piece PieceInfo) (uint64, error) {
-
-	directions := [][2]int{
-		{1, 0},  // east
-		{-1, 0}, // west
-		{0, 1},  // north
-		{0, -1}, // south
+func (e *Engine) GenerateLateralMoves(piece PieceInfo, moves *[]Move) error {
+	fromSq := bits.TrailingZeros64(piece.Mask)
+	friendly := e.BlackOccupancy()
+	if piece.IsWhite {
+		friendly = e.WhiteOccupancy()
 	}
 
-	return e.GenerateRangeMoves(piece, directions)
+	return e.addLegalMovesFromMask(piece, rookAttacks(fromSq, e.Occupancy())&^friendly, moves)
 }
 
-func (e *Engine) GenerateKnightMoves(piece PieceInfo) (uint64, error) {
+func (e *Engine) GenerateKnightMoves(piece PieceInfo, moves *[]Move) error {
 
-	directions := [][2]int{
-		{1, 2},
-		{-1, 2},
-		{-2, 1},
-		{-2, -1},
-		{1, -2},
-		{-1, -2},
-		{2, -1},
-		{2, 1},
+	fromSq := bits.TrailingZeros64(piece.Mask)
+
+	friendly := e.BlackOccupancy()
+	if piece.IsWhite {
+		friendly = e.WhiteOccupancy()
 	}
 
-	return e.GenerateDirectMoves(piece, directions)
+	return e.addLegalMovesFromMask(piece, knightAttacks[fromSq]&^friendly, moves)
 }
 
-func (e *Engine) GenerateKingMoves(piece PieceInfo) (uint64, error) {
+func (e *Engine) GenerateKingMoves(piece PieceInfo, moves *[]Move) error {
 
-	directions := [][2]int{
-		{0, 1},
-		{-1, 1},
-		{-1, 0},
-		{-1, -1},
-		{0, -1},
-		{1, -1},
-		{1, 0},
-		{1, 1},
+	fromSq := bits.TrailingZeros64(piece.Mask)
+
+	friendly := e.BlackOccupancy()
+	if piece.IsWhite {
+		friendly = e.WhiteOccupancy()
 	}
 
-	// get the mask for the base moves
-	moveMask, err := e.GenerateDirectMoves(piece, directions)
-
-	if err != nil {
-		return uint64(0), err
+	if err := e.addLegalMovesFromMask(piece, kingAttacks[fromSq]&^friendly, moves); err != nil {
+		return err
 	}
 
 	x, y, err := MaskToSpace(piece.Mask)
-
 	if err != nil {
-		return uint64(0), err
-	}
-
-	// define moveset for castling
-	castles := [][2]int{}
-
-	// flip caslting direction if Board is flipped
-	sideModifier := -1
-
-	if e.PlayAsWhite {
-		sideModifier = 1
+		return err
 	}
 
 	if piece.IsWhite {
 		if e.whiteCanCastleQueenSide && e.CastlePathLegal(x, y, 0, piece.IsWhite) {
-			castles = append(castles, [2]int{-2 * sideModifier, 0})
+			if err := e.tryAppendLegalMove(piece, Move{FromX: x, FromY: y, ToX: x - 2, ToY: y, Promotion: NONE}, moves); err != nil {
+				return err
+			}
 		}
 		if e.whiteCanCastleKingSide && e.CastlePathLegal(x, y, 7, piece.IsWhite) {
-			castles = append(castles, [2]int{2 * sideModifier, 0})
+			if err := e.tryAppendLegalMove(piece, Move{FromX: x, FromY: y, ToX: x + 2, ToY: y, Promotion: NONE}, moves); err != nil {
+				return err
+			}
 		}
 	} else {
 		if e.blackCanCastleQueenSide && e.CastlePathLegal(x, y, 0, piece.IsWhite) {
-			castles = append(castles, [2]int{-2 * sideModifier, 0})
+			if err := e.tryAppendLegalMove(piece, Move{FromX: x, FromY: y, ToX: x - 2, ToY: y, Promotion: NONE}, moves); err != nil {
+				return err
+			}
 		}
 		if e.blackCanCastleKingSide && e.CastlePathLegal(x, y, 7, piece.IsWhite) {
-			castles = append(castles, [2]int{2 * sideModifier, 0})
+			if err := e.tryAppendLegalMove(piece, Move{FromX: x, FromY: y, ToX: x + 2, ToY: y, Promotion: NONE}, moves); err != nil {
+				return err
+			}
 		}
 	}
 
-	castleMask, castleErr := e.GenerateDirectMoves(piece, castles)
-
-	if castleErr != nil {
-		return uint64(0), err
-	}
-
-	return moveMask | castleMask, nil
-}
-
-func (e *Engine) GeneratePawnMoves(piece PieceInfo) (uint64, error) {
-
-	baseDirection := -1
-
-	if (e.PlayAsWhite && !piece.IsWhite) || (!e.PlayAsWhite && piece.IsWhite) {
-		baseDirection = 1
-	}
-
-	directions := [][2]int{
-		{0, baseDirection},
-	}
-
-	captures := [][2]int{
-		{1, baseDirection},
-		{-1, baseDirection},
-	}
-
-	x, y, _ := MaskToSpace(piece.Mask)
-
-	canMoveTwice := e.PlayAsWhite && ((piece.IsWhite && y == 6) || (!piece.IsWhite && y == 1)) ||
-		!e.PlayAsWhite && ((!piece.IsWhite && y == 6) || (piece.IsWhite && y == 1))
-
-	if canMoveTwice {
-		directions = append(directions, [2]int{0, baseDirection * 2})
-	}
-
-	// actually start checking and adding to a mask
-
-	mask := uint64(0)
-
-	occupancy := e.Occupancy()
-
-	var enemyOccupancy uint64
-
-	if piece.IsWhite {
-		enemyOccupancy = e.BlackOccupancy()
-	} else {
-		enemyOccupancy = e.WhiteOccupancy()
-	}
-
-	// check moves
-	for step, dir := range directions {
-		if move, err := SpaceToMask(x+dir[0], y+dir[1]); err != nil {
-			// in this case we continue and don't return
-			// this could be saving us from a wrap-around
-			continue
-		} else {
-			if move&occupancy != 0 {
-				continue
-			}
-
-			// if the first step was blocked
-			if step == 1 {
-				if mask == 0 {
-					continue
-				}
-			}
-
-			mask |= move
-		}
-	}
-
-	// check captures
-	for _, dir := range captures {
-		if move, err := SpaceToMask(x+dir[0], y+dir[1]); err != nil {
-			continue
-		} else {
-			if move&enemyOccupancy == 0 && move&e.enPassantTarget == 0 {
-				continue
-			}
-
-			mask |= move
-		}
-	}
-
-	return mask, nil
-}
-
-func (e *Engine) GenerateDirectMoves(piece PieceInfo, directions [][2]int) (uint64, error) {
-
-	mask := uint64(0)
-
-	x, y, _ := MaskToSpace(piece.Mask)
-
-	var (
-		occupancy uint64
-	)
-
-	if piece.IsWhite {
-		occupancy = e.WhiteOccupancy()
-	} else {
-		occupancy = e.BlackOccupancy()
-	}
-
-	for _, dir := range directions {
-		if move, err := SpaceToMask(x+dir[0], y+dir[1]); err != nil {
-			continue // this is probably wrap around
-		} else {
-			if move&occupancy != 0 {
-				continue
-			}
-
-			mask |= move
-
-		}
-	}
-
-	return mask, nil
+	return nil
 
 }
 
-func (e *Engine) GenerateRangeMoves(piece PieceInfo, directions [][2]int) (uint64, error) {
-
+func (e *Engine) GeneratePawnMoves(piece PieceInfo, moves *[]Move) error {
 	x, y, err := MaskToSpace(piece.Mask)
 
 	if err != nil {
-		fmt.Println("GenerateRangeMoves() failed with: " + err.Error())
-		return uint64(0), err
+		return err
 	}
 
-	moves := uint64(0)
-
-	var (
-		occupancy      uint64
-		enemyOccupancy uint64
-	)
+	baseDirection := 1
+	startingRank := 1
 
 	if piece.IsWhite {
-		occupancy = e.WhiteOccupancy()
-		enemyOccupancy = e.BlackOccupancy()
-	} else {
-		occupancy = e.BlackOccupancy()
-		enemyOccupancy = e.WhiteOccupancy()
+		baseDirection = -1
+		startingRank = 6
 	}
 
-	for _, dir := range directions {
-		df := dir[0]
-		dr := dir[1]
+	occupancy := e.Occupancy()
+	enemy := e.WhiteOccupancy()
 
-		file := x + df
-		rank := y + dr
+	if piece.IsWhite {
+		enemy = e.BlackOccupancy()
+	}
 
-		for !CheckBounds(file, rank) {
-			if mask, err := SpaceToMask(file, rank); err != nil {
-				return uint64(0), err
-			} else {
+	oneY := y + baseDirection
 
-				if occupancy&mask != 0 {
-					break
+	if !CheckBounds(x, oneY) {
+		oneMask, _ := SpaceToMask(x, oneY)
+
+		if occupancy&oneMask == 0 {
+			if err := e.tryAppendPawnMove(piece, x, y, x, oneY, moves); err != nil {
+				return err
+			}
+
+			twoY := y + 2*baseDirection
+
+			if y == startingRank && !CheckBounds(x, twoY) {
+				twoMask, _ := SpaceToMask(x, twoY)
+
+				if occupancy&twoMask == 0 {
+					if err := e.tryAppendLegalMove(piece, Move{
+						FromX: x, FromY: y,
+						ToX: x, ToY: twoY, Promotion: NONE,
+					}, moves); err != nil {
+						return err
+					}
 				}
-
-				moves |= mask
-
-				if enemyOccupancy&mask != 0 {
-					break
-				}
-
-				file += df
-				rank += dr
-
 			}
 		}
 	}
 
-	return moves, nil
+	for _, dx := range [2]int{-1, 1} {
+		toX := x + dx
+		toY := y + baseDirection
+
+		if CheckBounds(toX, toY) {
+			continue
+		}
+
+		toMask, _ := SpaceToMask(toX, toY)
+
+		normalCapture := toMask&enemy != 0
+		enPassantCapture := e.enPassantTarget != 0 &&
+			toMask == e.enPassantTarget &&
+			e.enPassantPieceMask&enemy != 0
+
+		if normalCapture || enPassantCapture {
+			if err := e.tryAppendPawnMove(piece, x, y, toX, toY, moves); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (e *Engine) tryAppendPawnMove(piece PieceInfo, fromX, fromY, toX, toY int, moves *[]Move) error {
+	if e.isPromotionRank(toY, piece.IsWhite) {
+		for _, promotion := range []Piece{Queen, Rook, Bishop, Knight} {
+			if err := e.tryAppendLegalMove(piece, Move{
+				FromX:     fromX,
+				FromY:     fromY,
+				ToX:       toX,
+				ToY:       toY,
+				Promotion: promotion,
+			}, moves); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
+
+	return e.tryAppendLegalMove(piece, Move{
+		FromX:     fromX,
+		FromY:     fromY,
+		ToX:       toX,
+		ToY:       toY,
+		Promotion: NONE,
+	}, moves)
+}
+
+func (e *Engine) isPromotionRank(y int, isWhite bool) bool {
+	if isWhite {
+		return y == 0
+	}
+
+	return y == 7
+}
+
+func (e *Engine) addLegalMovesFromMask(piece PieceInfo, mask uint64, moves *[]Move) error {
+	fromX, fromY, err := MaskToSpace(piece.Mask)
+	if err != nil {
+		return err
+	}
+
+	for bb := mask; bb != 0; bb &= bb - 1 {
+		toMask := bb & -bb
+
+		toX, toY, err := MaskToSpace(toMask)
+
+		if err != nil {
+			return err
+		}
+
+		if err := e.tryAppendLegalMove(
+			piece,
+			Move{
+				FromX:     fromX,
+				FromY:     fromY,
+				ToX:       toX,
+				ToY:       toY,
+				Promotion: NONE,
+			},
+			moves,
+		); err != nil {
+			return err
+		}
+	}
+
+	return nil
+
+}
+
+func (e *Engine) tryAppendLegalMove(piece PieceInfo, move Move, moves *[]Move) error {
+	child := *e
+
+	if _, err := child.MakeMoveUnchecked(move); err != nil {
+		return nil
+	}
+
+	if child.KingIsChecked(piece.IsWhite) {
+		return nil
+	}
+
+	*moves = append(*moves, move)
+	return nil
 }
