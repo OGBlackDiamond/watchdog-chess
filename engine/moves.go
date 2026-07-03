@@ -138,12 +138,28 @@ func (e *Engine) makeConditionalMove(piece PieceInfo, move Move) error {
 }
 
 func (e *Engine) updateConditionalMoveState(piece PieceInfo, move Move) error {
+	e.enPassantTarget = uint64(0)
+	e.enPassantPieceMask = uint64(0)
 
 	switch piece.Piece {
 
 	case Pawn:
-		// we return instead of breaking becuase the enPassantTarget is reset at the end of this function
-		// we don't want that to happen if the pawn actually moved
+		if math.Abs(float64(move.ToY-move.FromY)) == 2 {
+			targetY := (move.FromY + move.ToY) / 2
+			targetMask, err := SpaceToMask(move.FromX, targetY)
+			if err != nil {
+				return err
+			}
+
+			pieceMask, err := SpaceToMask(move.ToX, move.ToY)
+			if err != nil {
+				return err
+			}
+
+			e.enPassantTarget = targetMask
+			e.enPassantPieceMask = pieceMask
+		}
+
 		return nil
 
 	// remove castling rights if the King moves
@@ -213,9 +229,6 @@ func (e *Engine) updateConditionalMoveState(piece PieceInfo, move Move) error {
 		}
 
 	}
-
-	e.enPassantTarget = uint64(0)
-	e.enPassantPieceMask = uint64(0)
 
 	return nil
 }

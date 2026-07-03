@@ -296,10 +296,6 @@ func (e *Engine) GeneratePawnMoves(piece PieceInfo) (uint64, error) {
 				if mask == 0 {
 					continue
 				}
-				// if we are allowed to make a second move,
-				// set enPassantTarget to the square behind the pawn
-				e.enPassantTarget = mask
-				e.enPassantPieceMask = move
 			}
 
 			mask |= move

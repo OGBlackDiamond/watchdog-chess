@@ -19,7 +19,7 @@ const (
 	screenWidth  int = 8 * int(tileSize)
 	screenHeight int = 8 * int(tileSize)
 
-	watchdogDepth = 3
+	watchdogDepth = 5
 )
 
 var (
