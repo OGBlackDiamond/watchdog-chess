@@ -46,11 +46,8 @@ func (g *Graphics) DrawBoard(screen *ebiten.Image) {
 		for j := range 4 {
 			op := &ebiten.DrawImageOptions{}
 
-			checker_offset := (j * 2) + (i % 2)
 
-			if playAsWhite {
-				checker_offset = (j * 2) + ((i + 1) % 2)
-			}
+			checker_offset := (j * 2) + ((i + 1) % 2)
 
 			op.GeoM.Translate(
 				float64(checker_offset)*tileSize,

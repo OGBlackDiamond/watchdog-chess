@@ -17,7 +17,7 @@ var (
 	isDragging      bool = false
 	clickLegalMoves uint64
 
-	playAsWhite = true
+	playAsWhite = false 
 
 	whiteToMove bool = true
 )
