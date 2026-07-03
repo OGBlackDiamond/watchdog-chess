@@ -7,7 +7,7 @@ import (
 
 func SpaceToMask(x, y int) (uint64, error) {
 	if CheckBounds(x, y) {
-		err := errors.New("Coordinates for bit Board out of bounds")
+		err := errors.New("coordinates for bit Board out of bounds")
 		return uint64(0), err
 	}
 
@@ -19,11 +19,11 @@ func SpaceToMask(x, y int) (uint64, error) {
 func MaskToSpace(mask uint64) (int, int, error) {
 
 	if mask == 0 {
-		return 0, 0, errors.New("Mask is empty")
+		return 0, 0, errors.New("mask is empty")
 	}
 
 	if mask&(mask-1) != 0 {
-		return 0, 0, errors.New("Mask has more than one bit set")
+		return 0, 0, errors.New("mask has more than one bit set")
 	}
 
 	square := bits.TrailingZeros64(mask)

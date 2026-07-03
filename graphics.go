@@ -42,8 +42,8 @@ func NewGraphics() *Graphics {
 func (g *Graphics) DrawBoard(screen *ebiten.Image) {
 	screen.Fill(color.RGBA{225, 170, 40, 255})
 
-	for i := 0; i < 8; i++ {
-		for j := 0; j < 4; j++ {
+	for i := range 8 {
+		for j := range 4 {
 			op := &ebiten.DrawImageOptions{}
 
 			checker_offset := (j * 2) + (i % 2)

@@ -5,17 +5,17 @@ import (
 	"math"
 )
 
-func (e *Engine) MakeMove(fromX, fromY int, toX, toY int) (bool, error) {
+func (e *Engine) MakeMove(move Move) (bool, error) {
 
-	if CheckBounds(fromX, fromY) || CheckBounds(toX, toY) {
-		return false, errors.New("Square out of bounds")
+	if CheckBounds(move.FromX, move.FromY) || CheckBounds(move.ToX, move.ToY) {
+		return false, errors.New("square out of bounds")
 	}
 
-	if fromX == toX && fromY == toY {
-		return false, errors.New("No move to make")
+	if move.FromX == move.ToX && move.FromY == move.ToY {
+		return false, errors.New("no move to make")
 	}
 
-	fromPiece, fromErr := e.GetBitBoardForSquare(fromX, fromY)
+	fromPiece, fromErr := e.GetBitBoardForSquare(move.FromX, move.FromY)
 
 	if fromErr != nil {
 		return false, errors.New("MakeMove() failed with error: " + fromErr.Error())
@@ -35,7 +35,7 @@ func (e *Engine) MakeMove(fromX, fromY int, toX, toY int) (bool, error) {
 		return false, errors.New("MakeMove() failed with error: friendly piece not selected")
 	}
 
-	toPiece, toErr := e.GetBitBoardForSquare(toX, toY)
+	toPiece, toErr := e.GetBitBoardForSquare(move.ToX, move.ToY)
 
 	toIsEmpty := false
 
@@ -43,7 +43,7 @@ func (e *Engine) MakeMove(fromX, fromY int, toX, toY int) (bool, error) {
 		if toPiece != nil {
 			// we landed on a square with no piece
 			// we need to manually generate the mask for it here
-			toPiece.Mask, _ = SpaceToMask(toX, toY)
+			toPiece.Mask, _ = SpaceToMask(move.ToX, move.ToY)
 			toIsEmpty = true
 		} else {
 			return false, errors.New("MakeMove() failed with error: " + toErr.Error())
@@ -70,8 +70,8 @@ func (e *Engine) MakeMove(fromX, fromY int, toX, toY int) (bool, error) {
 			*toPiece.Bitboard &^= toPiece.Mask
 		}
 
-		e.makeConditionalMove(*fromPiece, fromX, fromY, toX, toY)
-		e.updateConditionalMoveState(*fromPiece, fromX, fromY)
+		e.makeConditionalMove(*fromPiece, move)
+		e.updateConditionalMoveState(*fromPiece, move)
 
 		return true, nil
 	}
@@ -79,13 +79,13 @@ func (e *Engine) MakeMove(fromX, fromY int, toX, toY int) (bool, error) {
 	return false, nil
 }
 
-func (e *Engine) makeConditionalMove(piece PieceInfo, fromX, fromY, toX, toY int) error {
+func (e *Engine) makeConditionalMove(piece PieceInfo, move Move) error {
 
 	switch piece.Piece {
 
 	case King:
 
-		castleDirection := float64(toX - fromX)
+		castleDirection := float64(move.ToX - move.FromX)
 		// we castled
 		if math.Abs(castleDirection) == 2 {
 
@@ -96,13 +96,13 @@ func (e *Engine) makeConditionalMove(piece PieceInfo, fromX, fromY, toX, toY int
 				rookX = 7
 			}
 
-			castleRookMask, err := SpaceToMask(rookX, toY)
+			castleRookMask, err := SpaceToMask(rookX, move.ToY)
 
 			if err != nil {
 				return err
 			}
 
-			rookToMask, toErr := SpaceToMask(toX-int(castleDirection/2), toY)
+			rookToMask, toErr := SpaceToMask(move.ToX-int(castleDirection/2), move.ToY)
 
 			if toErr != nil {
 				return toErr
@@ -137,7 +137,7 @@ func (e *Engine) makeConditionalMove(piece PieceInfo, fromX, fromY, toX, toY int
 	return nil
 }
 
-func (e *Engine) updateConditionalMoveState(piece PieceInfo, x, y int) error {
+func (e *Engine) updateConditionalMoveState(piece PieceInfo, move Move) error {
 
 	switch piece.Piece {
 
@@ -158,10 +158,10 @@ func (e *Engine) updateConditionalMoveState(piece PieceInfo, x, y int) error {
 
 	case Rook:
 		// check if a rook is in any of the corners first
-		bottom := y == 7
-		top := y == 0
-		left := x == 0
-		right := x == 7
+		bottom := move.FromY == 7
+		top := move.FromY == 0
+		left := move.FromX == 0
+		right := move.FromX == 7
 
 		if top {
 			// if the piece is not friendly, it shouldn't be on top
@@ -221,21 +221,21 @@ func (e *Engine) updateConditionalMoveState(piece PieceInfo, x, y int) error {
 }
 
 // just mutates the Board, this is used for legal move checks in the future
-func (e *Engine) makeMoveUnchecked(fromX, fromY, toX, toY int) (bool, error) {
+func (e *Engine) makeMoveUnchecked(move Move) (bool, error) {
 
-	fromPiece, err := e.GetBitBoardForSquare(fromX, fromY)
+	fromPiece, err := e.GetBitBoardForSquare(move.FromX, move.FromY)
 
 	if err != nil {
 		return false, err
 	}
 
-	toPiece, err := e.GetBitBoardForSquare(toX, toY)
+	toPiece, err := e.GetBitBoardForSquare(move.ToX, move.ToY)
 
 	toIsEmpty := false
 
 	if err != nil {
 		if toPiece != nil {
-			toPiece.Mask, _ = SpaceToMask(toX, toY)
+			toPiece.Mask, _ = SpaceToMask(move.ToX, move.ToY)
 			toIsEmpty = true
 		} else {
 			return false, err
@@ -248,8 +248,8 @@ func (e *Engine) makeMoveUnchecked(fromX, fromY, toX, toY int) (bool, error) {
 		*toPiece.Bitboard &^= toPiece.Mask
 	}
 
-	e.makeConditionalMove(*fromPiece, fromX, fromY, toX, toY)
-	//e.updateConditionalMoveState(*fromPiece, fromX, fromY)
+	e.makeConditionalMove(*fromPiece, move)
+	//e.updateConditionalMoveState(*fromPiece, move)
 
 	return true, nil
 }
@@ -291,5 +291,5 @@ func (e *Engine) GetBitBoardForSquare(x, y int) (*PieceInfo, error) {
 		}
 	}
 
-	return pieceInfo, errors.New("Square is empty")
+	return pieceInfo, errors.New("square is empty")
 }

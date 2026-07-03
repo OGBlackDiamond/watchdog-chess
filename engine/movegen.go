@@ -5,6 +5,63 @@ import (
 	"fmt"
 )
 
+func (e *Engine) GenerateLegalMovesForPosition(whiteToMove bool) ([]Move, error) {
+	pieces := e.Board.BlackPieces
+	if whiteToMove {
+		pieces = e.Board.WhitePieces
+	}
+
+	bitboards := []uint64{
+		pieces.Pawns,
+		pieces.Rooks,
+		pieces.Knights,
+		pieces.Bishops,
+		pieces.Queen,
+		pieces.King,
+	}
+
+	moves := []Move{}
+
+	for piece, bitboard := range bitboards {
+		for fromMask := uint64(1); fromMask != 0; fromMask <<= 1 {
+			if bitboard&fromMask == 0 {
+				continue
+			}
+
+			fromX, fromY, err := MaskToSpace(fromMask)
+
+			if err != nil {
+				return nil, err
+			}
+
+			legalMask, err := e.GenerateLegalMovesForPiece(PieceInfo{
+				Piece:   Piece(piece),
+				IsWhite: whiteToMove,
+				Mask:    fromMask,
+			})
+
+			if err != nil {
+				return nil, err
+			}
+
+			for toMask := uint64(1); toMask != 0; toMask <<= 1 {
+				if legalMask&toMask == 0 {
+					continue
+				}
+
+				toX, toY, err := MaskToSpace(toMask)
+				if err != nil {
+					return nil, err
+				}
+
+				moves = append(moves, Move{FromX: fromX, FromY: fromY, ToX: toX, ToY: toY})
+			}
+		}
+	}
+
+	return moves, nil
+}
+
 func (e *Engine) GenerateLegalMovesForPiece(piece PieceInfo) (uint64, error) {
 	pseudoLegalMoves, err := e.GeneratePseudoLegalMovesForPiece(piece)
 
@@ -33,7 +90,7 @@ func (e *Engine) GenerateLegalMovesForPiece(piece PieceInfo) (uint64, error) {
 		}
 
 		copy := *e
-		_, err = copy.makeMoveUnchecked(fromX, fromY, toX, toY)
+		_, err = copy.makeMoveUnchecked(Move{FromX: fromX, FromY: fromY, ToX: toX, ToY: toY})
 		if err != nil {
 			continue
 		}

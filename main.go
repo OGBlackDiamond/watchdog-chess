@@ -1,10 +1,13 @@
+// Package main starts the chess engine and the graphics application
 package main
 
 import (
+	"errors"
 	_ "image/png"
 	"log"
 
 	chessengine "github.com/OGBlackDiamond/watchdog-chess/engine"
+	"github.com/OGBlackDiamond/watchdog-chess/watchdog"
 	"github.com/hajimehoshi/ebiten/v2"
 	"github.com/hajimehoshi/ebiten/v2/inpututil"
 	//"github.com/hajimehoshi/ebiten/v2/ebitenutil"
@@ -16,7 +19,7 @@ const (
 	screenWidth  int = 8 * int(tileSize)
 	screenHeight int = 8 * int(tileSize)
 
-	playAsWhite = true
+	watchdogDepth = 3
 )
 
 var (
@@ -32,6 +35,23 @@ func (g *Game) Update() error {
 		handleLeftPress()
 	} else if inpututil.IsMouseButtonJustReleased(ebiten.MouseButtonLeft) {
 		handleLeftRelease()
+	}
+
+	if whiteToMove != playAsWhite {
+
+		move, moveFound, err := watchdog.ChooseMove(engine, watchdogDepth, whiteToMove)
+
+		if err != nil {
+			return err
+		}
+
+		if !moveFound {
+			return errors.New("Solver didn't find a move")
+		}
+
+		engine.MakeMove(move)
+
+		whiteToMove = !whiteToMove
 	}
 
 	return nil

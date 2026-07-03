@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	chessengine "github.com/OGBlackDiamond/watchdog-chess/engine"
 	"github.com/hajimehoshi/ebiten/v2"
 )
 
@@ -15,6 +16,10 @@ var (
 	dragX, dragY    int
 	isDragging      bool = false
 	clickLegalMoves uint64
+
+	playAsWhite = false
+
+	whiteToMove bool = true
 )
 
 func handleLeftPress() error {
@@ -56,12 +61,15 @@ func handleLeftRelease() error {
 	x /= int(tileSize)
 	y /= int(tileSize)
 
-	_, err := engine.MakeMove(dragX, dragY, x, y)
+	_, err := engine.MakeMove(chessengine.Move{FromX: dragX, FromY: dragY, ToX: x, ToY: y})
 
 	if err != nil {
 		fmt.Println(err.Error())
 		return err
 	}
+
+	// a move was actually made if we make it here
+	whiteToMove = !whiteToMove
 
 	return nil
 }

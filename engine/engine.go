@@ -1,3 +1,4 @@
+// Package engine implements chess board state and move generation
 package engine
 
 type Engine struct {
@@ -18,6 +19,13 @@ type Board struct {
 	BlackPieces Pieces
 }
 
+type Move struct {
+	FromX int
+	FromY int
+	ToX   int
+	ToY   int
+}
+
 type Pieces struct {
 	Pawns   uint64
 	Rooks   uint64
@@ -27,7 +35,7 @@ type Pieces struct {
 	King    uint64
 }
 
-// struct for pieces
+// Piece is an enumeration of piece types
 type Piece int
 
 const (
