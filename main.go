@@ -19,12 +19,17 @@ const (
 	screenWidth  int = 8 * int(tileSize)
 	screenHeight int = 8 * int(tileSize)
 
-	watchdogDepth = 5
+	watchdogDepth = 6
 )
 
 var (
 	graphics *Graphics           = NewGraphics()
 	engine   *chessengine.Engine = chessengine.NewEngine(playAsWhite)
+
+	lastMoveMade chessengine.Move
+
+	watchdogThinking bool
+	watchdogResultCh chan watchdog.WatchdogResult
 )
 
 type Game struct{}
@@ -37,21 +42,50 @@ func (g *Game) Update() error {
 		handleLeftRelease()
 	}
 
-	if whiteToMove != playAsWhite {
+	// start a thread to pick a move
+	if whiteToMove != playAsWhite && !watchdogThinking {
+		watchdogThinking = true
+		watchdogResultCh = make(chan watchdog.WatchdogResult, 1)
 
-		move, moveFound, err := watchdog.ChooseMove(engine, watchdogDepth, whiteToMove)
+		searchEngine := *engine
+		sideToMove := whiteToMove
 
-		if err != nil {
-			return err
+		go func() {
+
+			move, moveFound, err := watchdog.ChooseMove(&searchEngine, watchdogDepth, sideToMove)
+			watchdogResultCh <- watchdog.WatchdogResult {
+				Move: move,
+				Found: moveFound,
+				Err: err,
+			}
+		}()
+
+	}
+
+	// poll the thread
+	if watchdogThinking {
+		select {
+		case result := <-watchdogResultCh:
+			watchdogThinking = false
+
+			if result.Err != nil {
+				return result.Err
+			}
+
+			if !result.Found {
+				return errors.New("Solver didn't find a move")
+			}
+
+			if _, err := engine.MakeMoveUnchecked(result.Move); err != nil {
+				return err
+			}
+
+			lastMoveMade = result.Move
+
+			whiteToMove = !whiteToMove
+		default:
+			// do nothing
 		}
-
-		if !moveFound {
-			return errors.New("Solver didn't find a move")
-		}
-
-		engine.MakeMove(move)
-
-		whiteToMove = !whiteToMove
 	}
 
 	return nil
@@ -59,6 +93,7 @@ func (g *Game) Update() error {
 
 func (g *Game) Draw(screen *ebiten.Image) {
 	graphics.DrawBoard(screen)
+	graphics.DrawLastMoveMade(screen)
 	graphics.DrawPieces(screen, &engine.Board.BlackPieces, false)
 	graphics.DrawPieces(screen, &engine.Board.WhitePieces, true)
 	if isDragging {

@@ -1,12 +1,12 @@
 package engine
 
-func (e *Engine) CastlePathLegal(kingX, y, rookX int, IsWhite bool) bool {
-	rookMask, err := SpaceToMask(rookX, y)
-	if err != nil {
+func (e *Engine) CastlePathLegal(kingX, y, rookX int, isWhite bool) bool {
+	rookMask, ok := SpaceToMask(rookX, y)
+	if !ok {
 		return false
 	}
 
-	if IsWhite {
+	if isWhite {
 		if e.Board.WhitePieces.Rooks&rookMask == 0 {
 			return false
 		}
@@ -25,18 +25,13 @@ func (e *Engine) CastlePathLegal(kingX, y, rookX int, IsWhite bool) bool {
 		step = -1
 	}
 
-	enemyAttackMask, err := e.GenerateAttackMask(!IsWhite)
-	if err != nil {
-		return false
-	}
-
 	for _, x := range []int{kingX, kingX + step, kingX + 2*step} {
-		mask, err := SpaceToMask(x, y)
-		if err != nil {
+		mask, ok := SpaceToMask(x, y)
+		if !ok {
 			return false
 		}
 
-		if enemyAttackMask&mask != 0 {
+		if e.SquareIsAttackedBy(mask, !isWhite) {
 			return false
 		}
 	}
@@ -54,9 +49,9 @@ func (e *Engine) CastlePathClear(kingX, y, rookX int) bool {
 	occupancy := e.Occupancy()
 
 	for x := kingX + step; x != rookX; x += step {
-		mask, err := SpaceToMask(x, y)
+		mask, ok := SpaceToMask(x, y)
 
-		if err != nil {
+		if !ok {
 			return false
 		}
 

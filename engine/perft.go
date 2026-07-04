@@ -32,7 +32,7 @@ func (e *Engine) Perft(depth int, whiteToMove bool) (uint64, error) {
 	for _, move := range moves {
 		child := *e
 
-		ok, err := child.MakeMove(move)
+		ok, err := child.MakeMoveUnchecked(move)
 		if err != nil {
 			return 0, fmt.Errorf("perft: MakeMove(%s) failed: %w", e.MoveString(move), err)
 		}
@@ -75,7 +75,7 @@ func (e *Engine) PerftDivide(depth int, whiteToMove bool) ([]DivideEntry, uint64
 	for _, move := range moves {
 		child := *e
 
-		ok, err := child.MakeMove(move)
+		ok, err := child.MakeMoveUnchecked(move)
 		if err != nil {
 			return nil, 0, fmt.Errorf("perft divide: MakeMove(%s) failed: %w", e.MoveString(move), err)
 		}

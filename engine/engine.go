@@ -57,6 +57,13 @@ type PieceInfo struct {
 	Mask     uint64
 }
 
+type OccupancyInfo struct {
+	White uint64
+	Black uint64
+	All uint64
+}
+
+
 func NewEngine(playAsWhite bool) *Engine {
 	e := &Engine{}
 	e.PlayAsWhite = playAsWhite

@@ -5,15 +5,14 @@ import (
 	"math/bits"
 )
 
-func SpaceToMask(x, y int) (uint64, error) {
+func SpaceToMask(x, y int) (uint64, bool) {
 	if CheckBounds(x, y) {
-		err := errors.New("coordinates for bit Board out of bounds")
-		return uint64(0), err
+		return uint64(0), false
 	}
 
 	mask := uint64(1) << ((7-y)*8 + x)
 
-	return mask, nil
+	return mask, true
 }
 
 func MaskToSpace(mask uint64) (int, int, error) {

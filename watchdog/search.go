@@ -2,6 +2,7 @@ package watchdog
 
 import (
 	"math"
+	"slices"
 
 	"github.com/OGBlackDiamond/watchdog-chess/engine"
 )
@@ -24,12 +25,17 @@ func ChooseMove(e *engine.Engine, depth int, whiteToMove bool) (engine.Move, boo
 		return engine.Move{}, false, nil
 	}
 
+	alpha := math.Inf(-1)
+	beta := math.Inf(1)
+
+	orderMoves(e, moves, whiteToMove)
+
 	for _, move := range moves {
 		child := *e
 		if _, err := child.MakeMoveUnchecked(move); err != nil {
 			return engine.Move{}, false, err
 		}
-		score, err := Negamax(&child, depth-1, math.Inf(-1), math.Inf(1), !whiteToMove)
+		score, err := Negamax(&child, depth-1, -beta, -alpha, !whiteToMove)
 		score *= -1 //negamaxxing
 
 		if err != nil {
@@ -40,6 +46,10 @@ func ChooseMove(e *engine.Engine, depth int, whiteToMove bool) (engine.Move, boo
 			bestScore = score
 			bestMove = move
 			found = true
+		}
+
+		if score > alpha {
+			alpha = score
 		}
 	}
 
@@ -65,9 +75,11 @@ func Negamax(e *engine.Engine, depth int, alpha float64, beta float64, whiteToMo
 		return 0, nil // stalemate
 	}
 
+	orderMoves(e, moves, whiteToMove)
+
 	for _, move := range moves {
 		child := *e
-		if _, err := child.MakeMove(move); err != nil {
+		if _, err := child.MakeMoveUnchecked(move); err != nil {
 			return 0, err
 		}
 
@@ -94,3 +106,35 @@ func Negamax(e *engine.Engine, depth int, alpha float64, beta float64, whiteToMo
 
 	return best, nil
 }
+
+func orderMoves(e *engine.Engine, moves []engine.Move, whiteToMove bool) {
+	slices.SortFunc(moves, func(a, b engine.Move) int {
+		return scoreMove(e, b, whiteToMove) - scoreMove(e, a, whiteToMove)
+	})
+}
+
+// this is NOT position scoring
+func scoreMove(e *engine.Engine, move engine.Move, whiteToMove bool) int {
+
+	score := 0
+
+	targetPiece, occupied := e.GetBitBoardForSquare(move.ToX, move.ToY)
+
+	attacker, attackerFound := e.GetBitBoardForSquare(move.FromX, move.FromY)
+
+	if occupied && targetPiece.IsWhite != whiteToMove {
+		score += 10_000
+		score += 10 * pieceValue(targetPiece.Piece)
+		
+		if attackerFound {
+			score -= pieceValue(attacker.Piece)
+		}
+	}
+
+	if move.Promotion != engine.NONE {
+		score += 9_000 + pieceValue(move.Promotion)
+	}
+
+	return score
+}
+

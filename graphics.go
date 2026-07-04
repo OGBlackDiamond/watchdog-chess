@@ -16,6 +16,8 @@ import (
 type Graphics struct {
 	darkSquare  *ebiten.Image
 	lightSquare *ebiten.Image // to cover pieces
+	moveIndicator *ebiten.Image
+
 	pieceTiles  *ebiten.Image
 
 	cursorPiece chessengine.PieceInfo
@@ -29,6 +31,9 @@ func NewGraphics() *Graphics {
 	lightSquare := ebiten.NewImage(int(tileSize), int(tileSize))
 	lightSquare.Fill(color.RGBA{225, 170, 40, 255})
 
+	moveIndicator := ebiten.NewImage(int(tileSize), int(tileSize))
+	moveIndicator.Fill(color.RGBA{10, 50, 20, 80})
+
 	// decode an image from the image file's byte slice.
 	img, _, err := ebitenutil.NewImageFromFile("assets/chess-pieces.png")
 	if err != nil {
@@ -36,7 +41,8 @@ func NewGraphics() *Graphics {
 	}
 	pieceTiles := ebiten.NewImageFromImage(img)
 
-	return &Graphics{darkSquare: darkSquare, lightSquare: lightSquare, pieceTiles: pieceTiles}
+	return &Graphics{darkSquare: darkSquare, lightSquare: lightSquare, 
+		moveIndicator: moveIndicator, pieceTiles: pieceTiles}
 }
 
 func (g *Graphics) DrawBoard(screen *ebiten.Image) {
@@ -70,7 +76,7 @@ func (g *Graphics) DrawPieces(screen *ebiten.Image, pieces *chessengine.Pieces, 
 	}
 
 	for piece, bitboard := range bitboards {
-		for square := 0; square < 64; square++ {
+		for square := range 64 {
 			if bitboard&(uint64(1)<<square) == 0 {
 				continue
 			}
@@ -152,9 +158,9 @@ func (g *Graphics) DrawLegalMoves(screen *ebiten.Image) error {
 
 
 	for _, move := range clickLegalMoves {
-		mask, err := chessengine.SpaceToMask(move.ToX, move.ToY)
+		mask, ok := chessengine.SpaceToMask(move.ToX, move.ToY)
 
-		if err != nil {
+		if !ok {
 			return nil
 		}
 
@@ -168,6 +174,22 @@ func (g *Graphics) DrawLegalMoves(screen *ebiten.Image) error {
 	}
 
 	return nil
+}
+
+func (g *Graphics) DrawLastMoveMade(screen *ebiten.Image) {
+
+	op := &ebiten.DrawImageOptions{}
+	fromX, fromY := boardToScreen(lastMoveMade.FromX, lastMoveMade.FromY)
+	fromX *= int(tileSize)
+	fromY *= int(tileSize)
+	op.GeoM.Translate(float64(fromX), float64(fromY))
+	screen.DrawImage(g.moveIndicator, op)
+
+	toX, toY := boardToScreen(lastMoveMade.ToX, lastMoveMade.ToY)
+	toX *= int(tileSize)
+	toY *= int(tileSize)
+	op.GeoM.Translate(float64(toX - fromX), float64(toY - fromY))
+	screen.DrawImage(g.moveIndicator, op)
 }
 
 /**

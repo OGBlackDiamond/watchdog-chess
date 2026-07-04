@@ -10,6 +10,13 @@ func (e *Engine) GenerateLegalMovesForPosition(whiteToMove bool) ([]Move, error)
 		pieces = e.Board.WhitePieces
 	}
 
+	occ := OccupancyInfo{
+		White: e.WhiteOccupancy(),
+		Black: e.BlackOccupancy(),
+		All: e.Occupancy(),
+	}
+
+
 	bitboards := []uint64{
 		pieces.Pawns,
 		pieces.Rooks,
@@ -31,6 +38,7 @@ func (e *Engine) GenerateLegalMovesForPosition(whiteToMove bool) ([]Move, error)
 				Mask:    fromMask,
 			},
 				&moves,
+				occ,
 			); err != nil {
 				return nil, err
 			}
@@ -40,78 +48,78 @@ func (e *Engine) GenerateLegalMovesForPosition(whiteToMove bool) ([]Move, error)
 	return moves, nil
 }
 
-func (e *Engine) GenerateLegalMovesForPiece(piece PieceInfo, moves *[]Move) error {
+func (e *Engine) GenerateLegalMovesForPiece(piece PieceInfo, moves *[]Move, occ OccupancyInfo) error {
 
 	switch piece.Piece {
 	case Pawn:
-		return e.GeneratePawnMoves(piece, moves)
+		return e.GeneratePawnMoves(piece, moves, occ)
 
 	case Rook:
-		return e.GenerateLateralMoves(piece, moves)
+		return e.GenerateLateralMoves(piece, moves, occ)
 
 	case Knight:
-		return e.GenerateKnightMoves(piece, moves)
+		return e.GenerateKnightMoves(piece, moves, occ)
 
 	case Bishop:
-		return e.GenerateDiagonalMoves(piece, moves)
+		return e.GenerateDiagonalMoves(piece, moves, occ)
 
 	case Queen:
-		if err := e.GenerateLateralMoves(piece, moves); err != nil {
+		if err := e.GenerateLateralMoves(piece, moves, occ); err != nil {
 			return err
 		}
 
-		if err := e.GenerateDiagonalMoves(piece, moves); err != nil {
+		if err := e.GenerateDiagonalMoves(piece, moves, occ); err != nil {
 			return err
 		}
 
 		return nil
 
 	case King:
-		return e.GenerateKingMoves(piece, moves)
+		return e.GenerateKingMoves(piece, moves, occ)
 	}
 
 	return nil
 }
 
-func (e *Engine) GenerateDiagonalMoves(piece PieceInfo, moves *[]Move) error {
+func (e *Engine) GenerateDiagonalMoves(piece PieceInfo, moves *[]Move, occ OccupancyInfo) error {
 	fromSq := bits.TrailingZeros64(piece.Mask)
-	friendly := e.BlackOccupancy()
+	friendly := occ.Black
 	if piece.IsWhite {
-		friendly = e.WhiteOccupancy()
+		friendly = occ.White
 	}
 
 	return e.addLegalMovesFromMask(piece, bishopAttacks(fromSq, e.Occupancy())&^friendly, moves)
 }
 
-func (e *Engine) GenerateLateralMoves(piece PieceInfo, moves *[]Move) error {
+func (e *Engine) GenerateLateralMoves(piece PieceInfo, moves *[]Move, occ OccupancyInfo) error {
 	fromSq := bits.TrailingZeros64(piece.Mask)
-	friendly := e.BlackOccupancy()
+	friendly := occ.Black
 	if piece.IsWhite {
-		friendly = e.WhiteOccupancy()
+		friendly = occ.White
 	}
 
 	return e.addLegalMovesFromMask(piece, rookAttacks(fromSq, e.Occupancy())&^friendly, moves)
 }
 
-func (e *Engine) GenerateKnightMoves(piece PieceInfo, moves *[]Move) error {
+func (e *Engine) GenerateKnightMoves(piece PieceInfo, moves *[]Move, occ OccupancyInfo) error {
 
 	fromSq := bits.TrailingZeros64(piece.Mask)
 
-	friendly := e.BlackOccupancy()
+	friendly := occ.Black
 	if piece.IsWhite {
-		friendly = e.WhiteOccupancy()
+		friendly = occ.White
 	}
 
 	return e.addLegalMovesFromMask(piece, knightAttacks[fromSq]&^friendly, moves)
 }
 
-func (e *Engine) GenerateKingMoves(piece PieceInfo, moves *[]Move) error {
+func (e *Engine) GenerateKingMoves(piece PieceInfo, moves *[]Move, occ OccupancyInfo) error {
 
 	fromSq := bits.TrailingZeros64(piece.Mask)
 
-	friendly := e.BlackOccupancy()
+	friendly := occ.Black
 	if piece.IsWhite {
-		friendly = e.WhiteOccupancy()
+		friendly = occ.White
 	}
 
 	if err := e.addLegalMovesFromMask(piece, kingAttacks[fromSq]&^friendly, moves); err != nil {
@@ -151,7 +159,7 @@ func (e *Engine) GenerateKingMoves(piece PieceInfo, moves *[]Move) error {
 
 }
 
-func (e *Engine) GeneratePawnMoves(piece PieceInfo, moves *[]Move) error {
+func (e *Engine) GeneratePawnMoves(piece PieceInfo, moves *[]Move, occ OccupancyInfo) error {
 	x, y, err := MaskToSpace(piece.Mask)
 
 	if err != nil {
@@ -166,11 +174,11 @@ func (e *Engine) GeneratePawnMoves(piece PieceInfo, moves *[]Move) error {
 		startingRank = 6
 	}
 
-	occupancy := e.Occupancy()
-	enemy := e.WhiteOccupancy()
+	occupancy := occ.All
+	enemy := occ.White
 
 	if piece.IsWhite {
-		enemy = e.BlackOccupancy()
+		enemy = occ.Black
 	}
 
 	oneY := y + baseDirection

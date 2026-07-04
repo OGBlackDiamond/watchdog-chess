@@ -17,18 +17,24 @@ func (e *Engine) MakeMove(move Move) (bool, error) {
 		return false, errors.New("no move to make")
 	}
 
-	fromPiece, fromErr := e.GetBitBoardForSquare(move.FromX, move.FromY)
+	fromPiece, spaceIsOccupied := e.GetBitBoardForSquare(move.FromX, move.FromY)
 
-	if fromErr != nil {
-		return false, errors.New("MakeMove() failed with error: " + fromErr.Error())
+	if !spaceIsOccupied {
+		return false, errors.New("MakeMove() failed with error: piece does not exist on from square")
+	}
+
+	occ := OccupancyInfo {
+		White:  e.WhiteOccupancy(),
+		Black:  e.BlackOccupancy(),
+		All: e.Occupancy(),
 	}
 
 	var friendlyOccupancy uint64
 
 	if fromPiece.IsWhite {
-		friendlyOccupancy = e.WhiteOccupancy()
+		friendlyOccupancy = occ.White
 	} else {
-		friendlyOccupancy = e.BlackOccupancy()
+		friendlyOccupancy = occ.Black
 	}
 
 	// TODO: Make this check actually mean something
@@ -37,24 +43,17 @@ func (e *Engine) MakeMove(move Move) (bool, error) {
 		return false, errors.New("MakeMove() failed with error: friendly piece not selected")
 	}
 
-	toPiece, toErr := e.GetBitBoardForSquare(move.ToX, move.ToY)
+	toPiece, spaceIsOccupied := e.GetBitBoardForSquare(move.ToX, move.ToY)
 
-	toIsEmpty := false
-
-	if toErr != nil {
-		if toPiece != nil {
-			// we landed on a square with no piece
-			// we need to manually generate the mask for it here
-			toPiece.Mask, _ = SpaceToMask(move.ToX, move.ToY)
-			toIsEmpty = true
-		} else {
-			return false, errors.New("MakeMove() failed with error: " + toErr.Error())
-		}
+	if !spaceIsOccupied {
+		// we landed on a square with no piece
+		// we need to manually generate the mask for it here
+		toPiece.Mask, _ = SpaceToMask(move.ToX, move.ToY)
 	}
 
 	legalMoves := make([]Move, 0, 64)
 
-	if err := e.GenerateLegalMovesForPiece(*fromPiece, &legalMoves); err != nil {
+	if err := e.GenerateLegalMovesForPiece(fromPiece, &legalMoves, occ); err != nil {
 		return false, errors.New("MakeMove() failed with error: " + err.Error())
 	}
 
@@ -66,14 +65,14 @@ func (e *Engine) MakeMove(move Move) (bool, error) {
 
 		*fromPiece.Bitboard &^= fromPiece.Mask
 		*fromPiece.Bitboard |= toPiece.Mask
-		if !toIsEmpty {
+		if spaceIsOccupied {
 			*toPiece.Bitboard &^= toPiece.Mask
 		}
 
-		if err := e.makeConditionalMove(*fromPiece, move); err != nil {
+		if err := e.makeConditionalMove(fromPiece, move); err != nil {
 			return false, err
 		}
-		if err := e.updateConditionalMoveState(*fromPiece, move); err != nil {
+		if err := e.updateConditionalMoveState(fromPiece, move); err != nil {
 			return false, err
 		}
 
@@ -100,16 +99,16 @@ func (e *Engine) makeConditionalMove(piece PieceInfo, move Move) error {
 				rookX = 7
 			}
 
-			castleRookMask, err := SpaceToMask(rookX, move.ToY)
+			castleRookMask, ok := SpaceToMask(rookX, move.ToY)
 
-			if err != nil {
-				return err
+			if !ok {
+				break
 			}
 
-			rookToMask, toErr := SpaceToMask(move.ToX-int(castleDirection/2), move.ToY)
+			rookToMask, ok := SpaceToMask(move.ToX-int(castleDirection/2), move.ToY)
 
-			if toErr != nil {
-				return toErr
+			if !ok {
+				break
 			}
 
 			if piece.IsWhite {
@@ -128,9 +127,9 @@ func (e *Engine) makeConditionalMove(piece PieceInfo, move Move) error {
 				return errors.New("invalid promotion piece")
 			}
 
-			toMask, err := SpaceToMask(move.ToX, move.ToY)
-			if err != nil {
-				return err
+			toMask, ok := SpaceToMask(move.ToX, move.ToY)
+			if !ok {
+				break
 			}
 
 			promotionBitboard := e.pieceBitboard(move.Promotion, piece.IsWhite)
@@ -197,14 +196,14 @@ func (e *Engine) updateConditionalMoveState(piece PieceInfo, move Move) error {
 	case Pawn:
 		if math.Abs(float64(move.ToY-move.FromY)) == 2 {
 			targetY := (move.FromY + move.ToY) / 2
-			targetMask, err := SpaceToMask(move.FromX, targetY)
-			if err != nil {
-				return err
+			targetMask, ok := SpaceToMask(move.FromX, targetY)
+			if !ok {
+				break
 			}
 
-			pieceMask, err := SpaceToMask(move.ToX, move.ToY)
-			if err != nil {
-				return err
+			pieceMask, ok := SpaceToMask(move.ToX, move.ToY)
+			if !ok {
+				break
 			}
 
 			e.enPassantTarget = targetMask
@@ -243,39 +242,32 @@ func (e *Engine) updateConditionalMoveState(piece PieceInfo, move Move) error {
 	return nil
 }
 
-// just mutates the Board, this is used for legal move checks in the future
+// MakeMoveUnchecked just mutates the Board, this is used for legal move checks in the future
 func (e *Engine) MakeMoveUnchecked(move Move) (bool, error) {
 	move = normalizeMove(move)
 
-	fromPiece, err := e.GetBitBoardForSquare(move.FromX, move.FromY)
+	fromPiece, spaceOccupied := e.GetBitBoardForSquare(move.FromX, move.FromY)
 
-	if err != nil {
-		return false, err
+	if !spaceOccupied {
+		return false, errors.New("MakeMoveUnchecked() failed with error: piece not at from square")
 	}
 
-	toPiece, err := e.GetBitBoardForSquare(move.ToX, move.ToY)
+	toPiece, isToOccupied := e.GetBitBoardForSquare(move.ToX, move.ToY)
 
-	toIsEmpty := false
-
-	if err != nil {
-		if toPiece != nil {
-			toPiece.Mask, _ = SpaceToMask(move.ToX, move.ToY)
-			toIsEmpty = true
-		} else {
-			return false, err
-		}
+	if !isToOccupied {
+		toPiece.Mask, _ = SpaceToMask(move.ToX, move.ToY)
 	}
 
 	*fromPiece.Bitboard &^= fromPiece.Mask
 	*fromPiece.Bitboard |= toPiece.Mask
-	if !toIsEmpty {
+	if isToOccupied {
 		*toPiece.Bitboard &^= toPiece.Mask
 	}
 
-	if err := e.makeConditionalMove(*fromPiece, move); err != nil {
+	if err := e.makeConditionalMove(fromPiece, move); err != nil {
 		return false, err
 	}
-	if err := e.updateConditionalMoveState(*fromPiece, move); err != nil {
+	if err := e.updateConditionalMoveState(fromPiece, move); err != nil {
 		return false, err
 	}
 
@@ -290,42 +282,56 @@ func normalizeMove(move Move) Move {
 	return move
 }
 
-func (e *Engine) GetBitBoardForSquare(x, y int) (*PieceInfo, error) {
+func (e *Engine) GetBitBoardForSquare(x, y int) (PieceInfo, bool) {
 
-	pieceInfo := &PieceInfo{}
+	mask, ok := SpaceToMask(x, y)
 
-	bitboards := []*uint64{
-		&e.Board.BlackPieces.Pawns,
-		&e.Board.BlackPieces.Rooks,
-		&e.Board.BlackPieces.Knights,
-		&e.Board.BlackPieces.Bishops,
-		&e.Board.BlackPieces.Queen,
-		&e.Board.BlackPieces.King,
-
-		&e.Board.WhitePieces.Pawns,
-		&e.Board.WhitePieces.Rooks,
-		&e.Board.WhitePieces.Knights,
-		&e.Board.WhitePieces.Bishops,
-		&e.Board.WhitePieces.Queen,
-		&e.Board.WhitePieces.King,
+	if !ok {
+		return PieceInfo{}, false
 	}
 
-	mask, err := SpaceToMask(x, y)
+	return e.pieceAtMask(mask)
+}
 
-	if err != nil {
-		return nil, err
+// is this really ugly? yeah, is it fast? yeah...
+func (e *Engine) pieceAtMask(mask uint64) (PieceInfo, bool) {
+	if e.Board.BlackPieces.Pawns&mask != 0 {
+		return PieceInfo{Bitboard: &e.Board.BlackPieces.Pawns, Piece: Pawn, IsWhite: false, Mask: mask}, true
+	}
+	if e.Board.BlackPieces.Rooks&mask != 0 {
+		return PieceInfo{Bitboard: &e.Board.BlackPieces.Rooks, Piece: Rook, IsWhite: false, Mask: mask}, true
+	}
+	if e.Board.BlackPieces.Knights&mask != 0 {
+		return PieceInfo{Bitboard: &e.Board.BlackPieces.Knights, Piece: Knight, IsWhite: false, Mask: mask}, true
+	}
+	if e.Board.BlackPieces.Bishops&mask != 0 {
+		return PieceInfo{Bitboard: &e.Board.BlackPieces.Bishops, Piece: Bishop, IsWhite: false, Mask: mask}, true
+	}
+	if e.Board.BlackPieces.Queen&mask != 0 {
+		return PieceInfo{Bitboard: &e.Board.BlackPieces.Queen, Piece: Queen, IsWhite: false, Mask: mask}, true
+	}
+	if e.Board.BlackPieces.King&mask != 0 {
+		return PieceInfo{Bitboard: &e.Board.BlackPieces.King, Piece: King, IsWhite: false, Mask: mask}, true
 	}
 
-	for piece, bb := range bitboards {
-		// hit
-		if *bb&mask != 0 {
-			pieceInfo.Mask = mask
-			pieceInfo.Bitboard = bb
-			pieceInfo.Piece = Piece(piece % 6)
-			pieceInfo.IsWhite = piece > 5
-			return pieceInfo, nil
-		}
+	if e.Board.WhitePieces.Pawns&mask != 0 {
+		return PieceInfo{Bitboard: &e.Board.WhitePieces.Pawns, Piece: Pawn, IsWhite: true, Mask: mask}, true
+	}
+	if e.Board.WhitePieces.Rooks&mask != 0 {
+		return PieceInfo{Bitboard: &e.Board.WhitePieces.Rooks, Piece: Rook, IsWhite: true, Mask: mask}, true
+	}
+	if e.Board.WhitePieces.Knights&mask != 0 {
+		return PieceInfo{Bitboard: &e.Board.WhitePieces.Knights, Piece: Knight, IsWhite: true, Mask: mask}, true
+	}
+	if e.Board.WhitePieces.Bishops&mask != 0 {
+		return PieceInfo{Bitboard: &e.Board.WhitePieces.Bishops, Piece: Bishop, IsWhite: true, Mask: mask}, true
+	}
+	if e.Board.WhitePieces.Queen&mask != 0 {
+		return PieceInfo{Bitboard: &e.Board.WhitePieces.Queen, Piece: Queen, IsWhite: true, Mask: mask}, true
+	}
+	if e.Board.WhitePieces.King&mask != 0 {
+		return PieceInfo{Bitboard: &e.Board.WhitePieces.King, Piece: King, IsWhite: true, Mask: mask}, true
 	}
 
-	return pieceInfo, errors.New("square is empty")
+	return PieceInfo{}, false
 }

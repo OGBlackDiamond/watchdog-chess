@@ -275,7 +275,7 @@ func BenchmarkMakeMoveStartpos(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		child := *eng
-		if _, err := child.MakeMove(e2e4); err != nil {
+		if _, err := child.MakeMoveUnchecked(e2e4); err != nil {
 			b.Fatal(err)
 		}
 	}

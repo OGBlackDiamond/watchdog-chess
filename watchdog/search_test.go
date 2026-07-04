@@ -28,7 +28,7 @@ func TestChooseMoveDepthThreeInitialPosition(t *testing.T) {
 				t.Fatal("ChooseMove did not find a move")
 			}
 
-			if _, err := e.MakeMove(move); err != nil {
+			if _, err := e.MakeMoveUnchecked(move); err != nil {
 				t.Fatalf("ChooseMove returned illegal move %+v: %v", move, err)
 			}
 		})

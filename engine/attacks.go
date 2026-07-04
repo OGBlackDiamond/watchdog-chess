@@ -2,20 +2,14 @@ package engine
 
 import "math/bits"
 
-func (e *Engine) KingIsChecked(IsWhite bool) bool {
+func (e *Engine) KingIsChecked(isWhite bool) bool {
 
-	kingMask := e.Board.WhitePieces.King
-	if !IsWhite {
-		kingMask = e.Board.BlackPieces.King
+	kingMask := e.Board.BlackPieces.King
+	if isWhite {
+		kingMask = e.Board.WhitePieces.King
 	}
 
-	enemyAttackMask, err := e.GenerateAttackMask(!IsWhite)
-
-	if err != nil {
-		return false
-	}
-
-	return kingMask&enemyAttackMask != 0
+	return e.SquareIsAttackedBy(kingMask, !isWhite)
 }
 
 func (e *Engine) GenerateAttackMask(IsWhite bool) (uint64, error) {
@@ -59,6 +53,46 @@ func (e *Engine) GenerateAttackMask(IsWhite bool) (uint64, error) {
 	return attackMask, nil
 }
 
+func (e *Engine) SquareIsAttackedBy(squareMask uint64, byWhite bool) bool {
+
+	sq := bits.TrailingZeros64(squareMask)
+
+	attackers := e.Board.BlackPieces
+	if byWhite {
+		attackers = e.Board.WhitePieces
+	}
+
+	color := blackIndex
+	if byWhite {
+		color = whiteIndex
+	}
+
+	if knightAttacks[sq]&attackers.Knights != 0 {
+        return true
+    }
+
+    if kingAttacks[sq]&attackers.King != 0 {
+        return true
+    }
+
+    if pawnAttackers[color][sq]&attackers.Pawns != 0 {
+        return true
+    }
+
+    occupancy := e.Occupancy()
+
+    if rookAttacks(sq, occupancy)&(attackers.Rooks|attackers.Queen) != 0 {
+        return true
+    }
+
+    if bishopAttacks(sq, occupancy)&(attackers.Bishops|attackers.Queen) != 0 {
+        return true
+    }
+
+    return false
+
+}
+
 func (e *Engine) GenerateAttackMaskForPiece(piece PieceInfo) (uint64, error) {
 	fromSq := bits.TrailingZeros64(piece.Mask)
 
@@ -82,30 +116,13 @@ func (e *Engine) GenerateAttackMaskForPiece(piece PieceInfo) (uint64, error) {
 }
 
 func (e *Engine) GeneratePawnAttackMask(piece PieceInfo) uint64 {
-	x, y, err := MaskToSpace(piece.Mask)
-	if err != nil {
-		return 0
-	}
 
-	direction := 1
+	color := blackIndex
 	if piece.IsWhite {
-		direction = -1
+		color = whiteIndex
 	}
 
-	attacks := uint64(0)
-	for _, dx := range [2]int{-1, 1} {
-		toX := x + dx
-		toY := y + direction
-		if CheckBounds(toX, toY) {
-			continue
-		}
+	sq := bits.TrailingZeros64(piece.Mask)
 
-		mask, err := SpaceToMask(toX, toY)
-		if err != nil {
-			return 0
-		}
-		attacks |= mask
-	}
-
-	return attacks
+	return pawnAttacks[color][sq]
 }

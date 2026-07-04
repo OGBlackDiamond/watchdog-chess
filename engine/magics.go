@@ -184,9 +184,9 @@ func squareToCoords(square int) (int, int) {
 }
 
 func mustSpaceToMask(x, y int) uint64 {
-	mask, err := SpaceToMask(x, y)
-	if err != nil {
-		panic(err)
+	mask, ok := SpaceToMask(x, y)
+	if !ok {
+		panic("Space out of bounds")
 	}
 
 	return mask

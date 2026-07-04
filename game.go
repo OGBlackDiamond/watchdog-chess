@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	chessengine "github.com/OGBlackDiamond/watchdog-chess/engine"
 	"github.com/hajimehoshi/ebiten/v2"
@@ -17,7 +18,9 @@ var (
 	isDragging      bool = false
 	clickLegalMoves []chessengine.Move
 
-	playAsWhite = false
+	clickedPiece chessengine.PieceInfo
+
+	playAsWhite = true
 
 	whiteToMove bool = true
 )
@@ -31,21 +34,29 @@ func handleLeftPress() error {
 
 	fmt.Printf("screen: %d, %d board: %d, %d\n", screenX, screenY, dragX, dragY)
 
-	pieceInfo, err := engine.GetBitBoardForSquare(dragX, dragY)
+	pieceInfo, spaceIsOccupied := engine.GetBitBoardForSquare(dragX, dragY)
 
-	if err != nil {
-		fmt.Println(err.Error())
-		return err
+	if !spaceIsOccupied {
+		fmt.Println("Space is empty")
+		return nil
+	}
+
+	clickedPiece = pieceInfo
+
+	occ := chessengine.OccupancyInfo{
+		White: engine.WhiteOccupancy(),
+		Black: engine.BlackOccupancy(),
+		All: engine.Occupancy(),
 	}
 
 	clickLegalMoves = make([]chessengine.Move, 0, 64)
 
-	if err := engine.GenerateLegalMovesForPiece(*pieceInfo, &clickLegalMoves); err != nil {
+	if err := engine.GenerateLegalMovesForPiece(pieceInfo, &clickLegalMoves, occ); err != nil {
 		fmt.Println(err.Error())
 		return err
 	}
 
-	graphics.DrawPieceOnCursor(*pieceInfo)
+	graphics.DrawPieceOnCursor(pieceInfo)
 	isDragging = true
 
 	return nil
@@ -61,11 +72,47 @@ func handleLeftRelease() error {
 	screenY /= int(tileSize)
 	x, y := screenToBoard(screenX, screenY)
 
-	_, err := engine.MakeMove(chessengine.Move{FromX: dragX, FromY: dragY, ToX: x, ToY: y})
+	promotion := chessengine.NONE
+
+	if screenY == 0 && clickedPiece.Piece == chessengine.Pawn {
+		var char string
+
+		fmt.Print("What would you like to promote to? (q,r,b,k) :: ")
+		fmt.Scan(&char)
+
+		char = strings.ToLower(char)
+		char = char[:1]
+
+		switch char {
+		case "q":
+			promotion = chessengine.Queen
+		case "r":
+			promotion = chessengine.Rook
+		case "b":
+			promotion = chessengine.Bishop
+		case "k":
+			promotion = chessengine.Knight
+		}
+	}
+
+	moveMade := chessengine.Move{
+		FromX: dragX,
+		FromY: dragY,
+		ToX: x,
+		ToY: y,
+		Promotion: promotion,
+	}
+
+
+	didMakeMove, err := engine.MakeMove(moveMade)
 
 	if err != nil {
 		fmt.Println(err.Error())
 		return err
+	}
+
+	if didMakeMove {
+		lastMoveMade = moveMade
 	}
 
 	// a move was actually made if we make it here
