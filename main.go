@@ -57,10 +57,10 @@ func (g *Game) Update() error {
 		go func() {
 
 			move, moveFound, err := watchdog.ChooseMove(&searchEngine, watchdogDepth, sideToMove)
-			watchdogResultCh <- watchdog.WatchdogResult {
-				Move: move,
+			watchdogResultCh <- watchdog.WatchdogResult{
+				Move:  move,
 				Found: moveFound,
-				Err: err,
+				Err:   err,
 			}
 		}()
 

@@ -91,18 +91,18 @@ func TestPerft(t *testing.T) {
 
 			t.Parallel()
 
-			eng, whiteToMove, err := NewEngineFromFEN(tc.fen)
+			eng, err := NewEngineFromFEN(tc.fen)
 			if err != nil {
 				t.Fatalf("NewEngineFromFEN(%q) failed: %v", tc.fen, err)
 			}
 
-			got, err := eng.Perft(tc.depth, whiteToMove)
+			got, err := eng.Perft(tc.depth, eng.WhiteToMove)
 			if err != nil {
 				t.Fatalf("Perft(%d) returned error: %v", tc.depth, err)
 			}
 
 			if got != tc.want {
-				if entries, _, derr := eng.PerftDivide(tc.depth, whiteToMove); derr == nil {
+				if entries, _, derr := eng.PerftDivide(tc.depth, eng.WhiteToMove); derr == nil {
 					for _, entry := range entries {
 						t.Logf("  %s: %d", entry.Move, entry.Nodes)
 					}
@@ -114,12 +114,12 @@ func TestPerft(t *testing.T) {
 }
 
 func TestNewEngineFromFENStartpos(t *testing.T) {
-	got, whiteToMove, err := NewEngineFromFEN(StartingPositionFEN)
+	got, err := NewEngineFromFEN(StartingPositionFEN)
 	if err != nil {
 		t.Fatalf("NewEngineFromFEN failed: %v", err)
 	}
 
-	if !whiteToMove {
+	if !got.WhiteToMove {
 		t.Error("expected white to move in the starting position")
 	}
 
@@ -156,12 +156,12 @@ func TestNewEngineFromFENEnPassant(t *testing.T) {
 	// black just double-pushed e7e5, so white may capture en passant on e6
 	fen := "rnbqkbnr/pppp1ppp/8/4p3/8/8/PPPPPPPP/RNBQKBNR w KQkq e6 0 2"
 
-	eng, whiteToMove, err := NewEngineFromFEN(fen)
+	eng, err := NewEngineFromFEN(fen)
 	if err != nil {
 		t.Fatalf("NewEngineFromFEN failed: %v", err)
 	}
 
-	if !whiteToMove {
+	if !eng.WhiteToMove {
 		t.Error("expected white to move")
 	}
 
@@ -189,7 +189,7 @@ func TestNewEngineFromFENErrors(t *testing.T) {
 	}
 
 	for _, fen := range invalid {
-		if _, _, err := NewEngineFromFEN(fen); err == nil {
+		if _, err := NewEngineFromFEN(fen); err == nil {
 			t.Errorf("NewEngineFromFEN(%q) succeeded, want error", fen)
 		}
 	}
@@ -224,49 +224,49 @@ func TestSquareName(t *testing.T) {
 // ns/op and allocs/op before and after any optimization.
 
 func BenchmarkPerftStartposDepth3(b *testing.B) {
-	eng, whiteToMove, err := NewEngineFromFEN(StartingPositionFEN)
+	eng, err := NewEngineFromFEN(StartingPositionFEN)
 	if err != nil {
 		b.Fatal(err)
 	}
 
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := eng.Perft(3, whiteToMove); err != nil {
+		if _, err := eng.Perft(3, eng.WhiteToMove); err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
 func BenchmarkGenerateLegalMovesStartpos(b *testing.B) {
-	eng, whiteToMove, err := NewEngineFromFEN(StartingPositionFEN)
+	eng, err := NewEngineFromFEN(StartingPositionFEN)
 	if err != nil {
 		b.Fatal(err)
 	}
 
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := eng.GenerateLegalMovesForPosition(whiteToMove); err != nil {
+		if _, err := eng.GenerateLegalMovesForPosition(eng.WhiteToMove); err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
 func BenchmarkGenerateLegalMovesKiwipete(b *testing.B) {
-	eng, whiteToMove, err := NewEngineFromFEN(kiwipeteFEN)
+	eng, err := NewEngineFromFEN(kiwipeteFEN)
 	if err != nil {
 		b.Fatal(err)
 	}
 
 	b.ReportAllocs()
 	for b.Loop() {
-		if _, err := eng.GenerateLegalMovesForPosition(whiteToMove); err != nil {
+		if _, err := eng.GenerateLegalMovesForPosition(eng.WhiteToMove); err != nil {
 			b.Fatal(err)
 		}
 	}
 }
 
 func BenchmarkMakeMoveStartpos(b *testing.B) {
-	eng, _, err := NewEngineFromFEN(StartingPositionFEN)
+	eng, err := NewEngineFromFEN(StartingPositionFEN)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -282,7 +282,7 @@ func BenchmarkMakeMoveStartpos(b *testing.B) {
 }
 
 func BenchmarkKingIsCheckedStartpos(b *testing.B) {
-	eng, _, err := NewEngineFromFEN(StartingPositionFEN)
+	eng, err := NewEngineFromFEN(StartingPositionFEN)
 	if err != nil {
 		b.Fatal(err)
 	}

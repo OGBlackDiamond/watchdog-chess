@@ -125,7 +125,7 @@ func scoreMove(e *engine.Engine, move engine.Move, whiteToMove bool) int {
 	if occupied && targetPiece.IsWhite != whiteToMove {
 		score += 10_000
 		score += 10 * pieceValue(targetPiece.Piece)
-		
+
 		if attackerFound {
 			score -= pieceValue(attacker.Piece)
 		}
@@ -137,4 +137,3 @@ func scoreMove(e *engine.Engine, move engine.Move, whiteToMove bool) int {
 
 	return score
 }
-

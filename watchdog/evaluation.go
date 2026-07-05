@@ -7,20 +7,19 @@ import (
 )
 
 const (
-	pawnValue int = 100
+	pawnValue   int = 100
 	knightValue int = 320
 	bishopValue int = 330
-	rookValue int = 500
-	queenValue int = 900
-	kingValue int = 20_000
+	rookValue   int = 500
+	queenValue  int = 900
+	kingValue   int = 20_000
 
-	startValue int = 
-		pawnValue * 8 + 
-		knightValue * 2 +
-		bishopValue * 2 +
-		rookValue * 2 +
-		queenValue * 2 +
-		kingValue * 2
+	startValue int = pawnValue*8 +
+		knightValue*2 +
+		bishopValue*2 +
+		rookValue*2 +
+		queenValue*2 +
+		kingValue*2
 )
 
 func Evaluate(board engine.Board, whiteToMove bool) (float64, error) {
@@ -39,7 +38,7 @@ func Evaluate(board engine.Board, whiteToMove bool) (float64, error) {
 func evaluatePieces(pieces engine.Pieces, isWhite bool) int {
 	score := 0
 
-	f := 1//material(pieces) / startValue
+	f := 1 //material(pieces) / startValue
 
 	score += evaluateBitBoard(pieces.Pawns, engine.Pawn, isWhite, f)
 	score += evaluateBitBoard(pieces.Knights, engine.Knight, isWhite, f)
@@ -86,31 +85,30 @@ func pieceSquareValue(piece engine.Piece, square int, isWhite bool, f int) int {
 	}
 }
 
-
 func material(pieces engine.Pieces) int {
-    return bits.OnesCount64(pieces.Pawns) * pawnValue+
-        bits.OnesCount64(pieces.Knights) * knightValue+
-        bits.OnesCount64(pieces.Bishops) * bishopValue+
-        bits.OnesCount64(pieces.Rooks) * rookValue+
-        bits.OnesCount64(pieces.Queen) * queenValue+
-		bits.OnesCount64(pieces.King) * kingValue // i'm gonna try this to see if it motivates mate
+	return bits.OnesCount64(pieces.Pawns)*pawnValue +
+		bits.OnesCount64(pieces.Knights)*knightValue +
+		bits.OnesCount64(pieces.Bishops)*bishopValue +
+		bits.OnesCount64(pieces.Rooks)*rookValue +
+		bits.OnesCount64(pieces.Queen)*queenValue +
+		bits.OnesCount64(pieces.King)*kingValue // i'm gonna try this to see if it motivates mate
 }
 
 func pieceValue(piece engine.Piece) int {
-    switch piece {
-    case engine.Pawn:
-        return pawnValue
-    case engine.Knight:
-        return knightValue
-    case engine.Bishop:
-        return bishopValue
-    case engine.Rook:
-        return rookValue
-    case engine.Queen:
-        return queenValue
-    case engine.King:
-        return kingValue
-    default:
-        return 0
-    }
+	switch piece {
+	case engine.Pawn:
+		return pawnValue
+	case engine.Knight:
+		return knightValue
+	case engine.Bishop:
+		return bishopValue
+	case engine.Rook:
+		return rookValue
+	case engine.Queen:
+		return queenValue
+	case engine.King:
+		return kingValue
+	default:
+		return 0
+	}
 }

@@ -23,10 +23,10 @@ func (e *Engine) MakeMove(move Move) (bool, error) {
 		return false, errors.New("MakeMove() failed with error: piece does not exist on from square")
 	}
 
-	occ := OccupancyInfo {
-		White:  e.WhiteOccupancy(),
-		Black:  e.BlackOccupancy(),
-		All: e.Occupancy(),
+	occ := OccupancyInfo{
+		White: e.WhiteOccupancy(),
+		Black: e.BlackOccupancy(),
+		All:   e.Occupancy(),
 	}
 
 	// TODO: Make this check actually mean something
@@ -52,7 +52,6 @@ func (e *Engine) MakeMove(move Move) (bool, error) {
 	if !slices.Contains(legalMoves, move) {
 		return false, errors.New("MakeMove() failed with error: illegal move")
 	}
-
 
 	*fromPiece.Bitboard &^= fromPiece.Mask
 	*fromPiece.Bitboard |= toPiece.Mask

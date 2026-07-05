@@ -68,28 +68,28 @@ func (e *Engine) SquareIsAttackedBy(squareMask uint64, byWhite bool) bool {
 	}
 
 	if knightAttacks[sq]&attackers.Knights != 0 {
-        return true
-    }
+		return true
+	}
 
-    if kingAttacks[sq]&attackers.King != 0 {
-        return true
-    }
+	if kingAttacks[sq]&attackers.King != 0 {
+		return true
+	}
 
-    if pawnAttackers[color][sq]&attackers.Pawns != 0 {
-        return true
-    }
+	if pawnAttackers[color][sq]&attackers.Pawns != 0 {
+		return true
+	}
 
-    occupancy := e.Occupancy()
+	occupancy := e.Occupancy()
 
-    if rookAttacks(sq, occupancy)&(attackers.Rooks|attackers.Queen) != 0 {
-        return true
-    }
+	if rookAttacks(sq, occupancy)&(attackers.Rooks|attackers.Queen) != 0 {
+		return true
+	}
 
-    if bishopAttacks(sq, occupancy)&(attackers.Bishops|attackers.Queen) != 0 {
-        return true
-    }
+	if bishopAttacks(sq, occupancy)&(attackers.Bishops|attackers.Queen) != 0 {
+		return true
+	}
 
-    return false
+	return false
 
 }
 

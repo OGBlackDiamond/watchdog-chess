@@ -4,7 +4,7 @@ package watchdog
 import "github.com/OGBlackDiamond/watchdog-chess/engine"
 
 type WatchdogResult struct {
-	Move engine.Move
+	Move  engine.Move
 	Found bool
-	Err error
+	Err   error
 }

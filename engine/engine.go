@@ -66,18 +66,17 @@ type PieceInfo struct {
 type OccupancyInfo struct {
 	White uint64
 	Black uint64
-	All uint64
+	All   uint64
 }
 
 var zobrist zobristTables
 
 type zobristTables struct {
-	pieceSquare [2][6][64]uint64
-	sideToMove uint64
-	castling [16]uint64
+	pieceSquare   [2][6][64]uint64
+	sideToMove    uint64
+	castling      [16]uint64
 	enPassantFile [8]uint64
 }
-
 
 func NewEngine(playAsWhite bool) *Engine {
 	e := &Engine{}
@@ -124,7 +123,6 @@ func init() {
 	initZobrist()
 }
 
-
 // this initialized the psuedo-random numbers for zobrist hashing
 func initZobrist() {
 	rng := rand.New(rand.NewSource(1))
@@ -132,7 +130,7 @@ func initZobrist() {
 	for side := range zobrist.pieceSquare {
 		for piece := range zobrist.pieceSquare[side] {
 			for square := range zobrist.pieceSquare[side][piece] {
-				zobrist.pieceSquare[side][piece][square]= randomNum(rng)
+				zobrist.pieceSquare[side][piece][square] = randomNum(rng)
 			}
 		}
 	}
@@ -148,7 +146,6 @@ func initZobrist() {
 	}
 }
 
-
 // computes the hash for the current board state
 func (e *Engine) computeHash() {
 
@@ -162,7 +159,6 @@ func (e *Engine) computeHash() {
 		}
 
 		for piece := range zobrist.pieceSquare[side] {
-
 
 			var board uint64
 
@@ -185,7 +181,7 @@ func (e *Engine) computeHash() {
 
 			for square := range zobrist.pieceSquare[side][piece] {
 
-				if (uint64(1) << square) & board != 0 {
+				if (uint64(1)<<square)&board != 0 {
 					hash ^= zobrist.pieceSquare[side][piece][square]
 				}
 
@@ -196,15 +192,15 @@ func (e *Engine) computeHash() {
 	if !e.WhiteToMove {
 		hash ^= zobrist.sideToMove
 	}
-	
+
 	hash ^= zobrist.castling[e.castlingRightsMask()]
 
 	if e.enPassantTarget != 0 {
-	file, _, _ := MaskToSpace(e.enPassantTarget)
-	hash ^= zobrist.enPassantFile[file]
+		file, _, _ := MaskToSpace(e.enPassantTarget)
+		hash ^= zobrist.enPassantFile[file]
 
-	e.Hash = hash
-}
+		e.Hash = hash
+	}
 
 }
 

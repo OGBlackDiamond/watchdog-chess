@@ -44,10 +44,10 @@ func computeAttackMasks() {
 	for sq := range 64 {
 		knightAttacks[sq] = buildOffsetAttackMask(sq, knightOffsets)
 		kingAttacks[sq] = buildOffsetAttackMask(sq, kingOffsets)
-	
+
 		pawnAttacks[blackIndex][sq] = buildPawnAttacksFrom(sq, false)
 		pawnAttacks[whiteIndex][sq] = buildPawnAttacksFrom(sq, true)
-		
+
 		pawnAttackers[blackIndex][sq] = buildPawnAttackersTo(sq, false)
 		pawnAttackers[whiteIndex][sq] = buildPawnAttackersTo(sq, true)
 	}
@@ -85,34 +85,34 @@ func buildOffsetAttackMask(sq int, offsets [][2]int) uint64 {
 }
 
 func buildPawnAttackersTo(targetSq int, byWhite bool) uint64 {
-    x, y, err := MaskToSpace(uint64(1) << targetSq)
-    if err != nil {
-        panic(err)
-    }
+	x, y, err := MaskToSpace(uint64(1) << targetSq)
+	if err != nil {
+		panic(err)
+	}
 
-    pawnY := y + 1
-    if !byWhite {
-        pawnY = y - 1
-    }
+	pawnY := y + 1
+	if !byWhite {
+		pawnY = y - 1
+	}
 
-    attackers := uint64(0)
+	attackers := uint64(0)
 
-    for _, dx := range [2]int{-1, 1} {
-        pawnX := x + dx
+	for _, dx := range [2]int{-1, 1} {
+		pawnX := x + dx
 
-        if CheckBounds(pawnX, pawnY) {
-            continue
-        }
+		if CheckBounds(pawnX, pawnY) {
+			continue
+		}
 
-        mask, ok := SpaceToMask(pawnX, pawnY)
-        if !ok {
-            panic("Space out of bounds")
-        }
+		mask, ok := SpaceToMask(pawnX, pawnY)
+		if !ok {
+			panic("Space out of bounds")
+		}
 
-        attackers |= mask
-    }
+		attackers |= mask
+	}
 
-    return attackers
+	return attackers
 }
 
 func buildPawnAttacksFrom(fromSq int, byWhite bool) uint64 {
@@ -129,20 +129,20 @@ func buildPawnAttacksFrom(fromSq int, byWhite bool) uint64 {
 	attacks := uint64(0)
 
 	for _, dx := range [2]int{-1, 1} {
-        toX := x + dx
-        toY := y + direction
+		toX := x + dx
+		toY := y + direction
 
-        if CheckBounds(toX, toY) {
-            continue
-        }
+		if CheckBounds(toX, toY) {
+			continue
+		}
 
-        mask, ok := SpaceToMask(toX, toY)
-        if !ok {
-            panic("Space out of bounds")
-        }
+		mask, ok := SpaceToMask(toX, toY)
+		if !ok {
+			panic("Space out of bounds")
+		}
 
-        attacks |= mask
-    }
+		attacks |= mask
+	}
 
 	return attacks
 }

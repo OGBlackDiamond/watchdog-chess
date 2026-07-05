@@ -13,9 +13,8 @@ func (e *Engine) GenerateLegalMovesForPosition(whiteToMove bool) ([]Move, error)
 	occ := OccupancyInfo{
 		White: e.WhiteOccupancy(),
 		Black: e.BlackOccupancy(),
-		All: e.Occupancy(),
+		All:   e.Occupancy(),
 	}
-
 
 	bitboards := []uint64{
 		pieces.Pawns,

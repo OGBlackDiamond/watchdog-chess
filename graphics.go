@@ -14,11 +14,11 @@ import (
 )
 
 type Graphics struct {
-	darkSquare  *ebiten.Image
-	lightSquare *ebiten.Image // to cover pieces
+	darkSquare    *ebiten.Image
+	lightSquare   *ebiten.Image // to cover pieces
 	moveIndicator *ebiten.Image
 
-	pieceTiles  *ebiten.Image
+	pieceTiles *ebiten.Image
 
 	cursorPiece chessengine.PieceInfo
 }
@@ -41,7 +41,7 @@ func NewGraphics() *Graphics {
 	}
 	pieceTiles := ebiten.NewImageFromImage(img)
 
-	return &Graphics{darkSquare: darkSquare, lightSquare: lightSquare, 
+	return &Graphics{darkSquare: darkSquare, lightSquare: lightSquare,
 		moveIndicator: moveIndicator, pieceTiles: pieceTiles}
 }
 
@@ -156,7 +156,6 @@ func (g *Graphics) DrawCursorPiece(screen *ebiten.Image) error {
 
 func (g *Graphics) DrawLegalMoves(screen *ebiten.Image) error {
 
-
 	for _, move := range clickLegalMoves {
 		mask, ok := chessengine.SpaceToMask(move.ToX, move.ToY)
 
@@ -188,7 +187,7 @@ func (g *Graphics) DrawLastMoveMade(screen *ebiten.Image) {
 	toX, toY := boardToScreen(lastMoveMade.ToX, lastMoveMade.ToY)
 	toX *= int(tileSize)
 	toY *= int(tileSize)
-	op.GeoM.Translate(float64(toX - fromX), float64(toY - fromY))
+	op.GeoM.Translate(float64(toX-fromX), float64(toY-fromY))
 	screen.DrawImage(g.moveIndicator, op)
 }
 

@@ -44,7 +44,7 @@ func handleLeftPress() error {
 	occ := chessengine.OccupancyInfo{
 		White: engine.WhiteOccupancy(),
 		Black: engine.BlackOccupancy(),
-		All: engine.Occupancy(),
+		All:   engine.Occupancy(),
 	}
 
 	clickLegalMoves = make([]chessengine.Move, 0, 64)
@@ -94,13 +94,12 @@ func handleLeftRelease() error {
 	}
 
 	moveMade := chessengine.Move{
-		FromX: dragX,
-		FromY: dragY,
-		ToX: x,
-		ToY: y,
+		FromX:     dragX,
+		FromY:     dragY,
+		ToX:       x,
+		ToY:       y,
 		Promotion: promotion,
 	}
-
 
 	didMakeMove, err := engine.MakeMove(moveMade)
 
