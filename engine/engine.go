@@ -1,9 +1,15 @@
 // Package engine implements chess board state and move generation
 package engine
 
+import "math/rand"
+
 type Engine struct {
-	Board       Board
+	Board Board
+
+	Hash uint64 // Zobrist hash value for the current board state of this engine
+
 	PlayAsWhite bool
+	WhiteToMove bool
 
 	whiteCanCastleKingSide  bool
 	whiteCanCastleQueenSide bool
@@ -63,10 +69,20 @@ type OccupancyInfo struct {
 	All uint64
 }
 
+var zobrist zobristTables
+
+type zobristTables struct {
+	pieceSquare [2][6][64]uint64
+	sideToMove uint64
+	castling [16]uint64
+	enPassantFile [8]uint64
+}
+
 
 func NewEngine(playAsWhite bool) *Engine {
 	e := &Engine{}
 	e.PlayAsWhite = playAsWhite
+	e.WhiteToMove = true
 
 	e.Board = Board{}
 
@@ -99,5 +115,120 @@ func NewEngine(playAsWhite bool) *Engine {
 	e.enPassantTarget = uint64(0)
 	e.enPassantPieceMask = uint64(0)
 
+	e.computeHash()
+
 	return e
+}
+
+func init() {
+	initZobrist()
+}
+
+
+// this initialized the psuedo-random numbers for zobrist hashing
+func initZobrist() {
+	rng := rand.New(rand.NewSource(1))
+
+	for side := range zobrist.pieceSquare {
+		for piece := range zobrist.pieceSquare[side] {
+			for square := range zobrist.pieceSquare[side][piece] {
+				zobrist.pieceSquare[side][piece][square]= randomNum(rng)
+			}
+		}
+	}
+
+	zobrist.sideToMove = randomNum(rng)
+
+	for castling := range zobrist.castling {
+		zobrist.castling[castling] = randomNum(rng)
+	}
+
+	for file := range zobrist.enPassantFile {
+		zobrist.enPassantFile[file] = randomNum(rng)
+	}
+}
+
+
+// computes the hash for the current board state
+func (e *Engine) computeHash() {
+
+	hash := uint64(0)
+
+	for side := range zobrist.pieceSquare {
+
+		pieces := e.Board.BlackPieces
+		if side == 0 {
+			pieces = e.Board.WhitePieces
+		}
+
+		for piece := range zobrist.pieceSquare[side] {
+
+
+			var board uint64
+
+			switch Piece(piece) {
+
+			case Pawn:
+				board = pieces.Pawns
+			case Rook:
+				board = pieces.Rooks
+			case Knight:
+				board = pieces.Knights
+			case Bishop:
+				board = pieces.Bishops
+			case Queen:
+				board = pieces.Queen
+			case King:
+				board = pieces.King
+
+			}
+
+			for square := range zobrist.pieceSquare[side][piece] {
+
+				if (uint64(1) << square) & board != 0 {
+					hash ^= zobrist.pieceSquare[side][piece][square]
+				}
+
+			}
+		}
+	}
+
+	if !e.WhiteToMove {
+		hash ^= zobrist.sideToMove
+	}
+	
+	hash ^= zobrist.castling[e.castlingRightsMask()]
+
+	if e.enPassantTarget != 0 {
+	file, _, _ := MaskToSpace(e.enPassantTarget)
+	hash ^= zobrist.enPassantFile[file]
+
+	e.Hash = hash
+}
+
+}
+
+func (e *Engine) castlingRightsMask() int {
+	rights := 0
+	if e.whiteCanCastleKingSide {
+		rights |= 1
+	}
+	if e.whiteCanCastleQueenSide {
+		rights |= 2
+	}
+	if e.blackCanCastleKingSide {
+		rights |= 4
+	}
+	if e.blackCanCastleQueenSide {
+		rights |= 8
+	}
+	return rights
+}
+
+func randomNum(rng *rand.Rand) uint64 {
+	key := uint64(0)
+	for key == 0 {
+		key = rng.Uint64()
+	}
+	return key
 }

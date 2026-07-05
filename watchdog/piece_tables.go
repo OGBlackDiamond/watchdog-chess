@@ -153,5 +153,5 @@ func pstIndex(square int, isWhite bool) int {
 
 // linear interpolation
 func lerp(a int, b int, f int) int {
-	return a / 5 //(a * f) + (b * (startValue-f))
+	return a >> 1 // this waters down the table values
 }

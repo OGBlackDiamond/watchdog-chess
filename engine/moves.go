@@ -29,17 +29,9 @@ func (e *Engine) MakeMove(move Move) (bool, error) {
 		All: e.Occupancy(),
 	}
 
-	var friendlyOccupancy uint64
-
-	if fromPiece.IsWhite {
-		friendlyOccupancy = occ.White
-	} else {
-		friendlyOccupancy = occ.Black
-	}
-
 	// TODO: Make this check actually mean something
 	// (check for turns)
-	if fromPiece.Mask&friendlyOccupancy == 0 {
+	if e.WhiteToMove != fromPiece.IsWhite {
 		return false, errors.New("MakeMove() failed with error: friendly piece not selected")
 	}
 
@@ -61,25 +53,24 @@ func (e *Engine) MakeMove(move Move) (bool, error) {
 		return false, errors.New("MakeMove() failed with error: illegal move")
 	}
 
-	if toPiece.Mask&friendlyOccupancy == 0 {
 
-		*fromPiece.Bitboard &^= fromPiece.Mask
-		*fromPiece.Bitboard |= toPiece.Mask
-		if spaceIsOccupied {
-			*toPiece.Bitboard &^= toPiece.Mask
-		}
-
-		if err := e.makeConditionalMove(fromPiece, move); err != nil {
-			return false, err
-		}
-		if err := e.updateConditionalMoveState(fromPiece, move); err != nil {
-			return false, err
-		}
-
-		return true, nil
+	*fromPiece.Bitboard &^= fromPiece.Mask
+	*fromPiece.Bitboard |= toPiece.Mask
+	if spaceIsOccupied {
+		*toPiece.Bitboard &^= toPiece.Mask
 	}
 
-	return false, nil
+	if err := e.makeConditionalMove(fromPiece, move); err != nil {
+		return false, err
+	}
+	if err := e.updateConditionalMoveState(fromPiece, move); err != nil {
+		return false, err
+	}
+
+	//e.computeHash()
+
+	return true, nil
+
 }
 
 func (e *Engine) makeConditionalMove(piece PieceInfo, move Move) error {
@@ -191,6 +182,9 @@ func (e *Engine) updateConditionalMoveState(piece PieceInfo, move Move) error {
 	e.enPassantTarget = uint64(0)
 	e.enPassantPieceMask = uint64(0)
 
+	// turns pass
+	e.WhiteToMove = !e.WhiteToMove
+
 	switch piece.Piece {
 
 	case Pawn:
@@ -270,6 +264,8 @@ func (e *Engine) MakeMoveUnchecked(move Move) (bool, error) {
 	if err := e.updateConditionalMoveState(fromPiece, move); err != nil {
 		return false, err
 	}
+
+	//e.computeHash()
 
 	return true, nil
 }

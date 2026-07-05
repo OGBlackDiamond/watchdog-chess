@@ -18,11 +18,11 @@ const StartingPositionFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq 
 // The engine does not track whose turn it is, so the side to move is returned
 // separately. The halfmove clock and fullmove number fields are ignored
 // because the engine does not track them.
-func NewEngineFromFEN(fen string) (*Engine, bool, error) {
+func NewEngineFromFEN(fen string) (*Engine, error) {
 	fields := strings.Fields(strings.TrimSpace(fen))
 
 	if len(fields) < 4 {
-		return nil, false, fmt.Errorf("fen %q: expected at least 4 fields, got %d", fen, len(fields))
+		return nil, fmt.Errorf("fen %q: expected at least 4 fields, got %d", fen, len(fields))
 	}
 
 	e := &Engine{PlayAsWhite: true}
@@ -30,7 +30,7 @@ func NewEngineFromFEN(fen string) (*Engine, bool, error) {
 	// field 0: piece placement, ranks 8 down to 1
 	ranks := strings.Split(fields[0], "/")
 	if len(ranks) != 8 {
-		return nil, false, fmt.Errorf("fen %q: expected 8 ranks, got %d", fen, len(ranks))
+		return nil, fmt.Errorf("fen %q: expected 8 ranks, got %d", fen, len(ranks))
 	}
 
 	for i, rankStr := range ranks {
@@ -44,7 +44,7 @@ func NewEngineFromFEN(fen string) (*Engine, bool, error) {
 			}
 
 			if file > 7 {
-				return nil, false, fmt.Errorf("fen %q: rank %d overflows 8 files", fen, rank+1)
+				return nil, fmt.Errorf("fen %q: rank %d overflows 8 files", fen, rank+1)
 			}
 
 			mask := uint64(1) << (rank*8 + file)
@@ -68,14 +68,14 @@ func NewEngineFromFEN(fen string) (*Engine, bool, error) {
 			case 'k', 'K':
 				pieces.King |= mask
 			default:
-				return nil, false, fmt.Errorf("fen %q: invalid piece character %q", fen, c)
+				return nil, fmt.Errorf("fen %q: invalid piece character %q", fen, c)
 			}
 
 			file++
 		}
 
 		if file != 8 {
-			return nil, false, fmt.Errorf("fen %q: rank %d has %d files, expected 8", fen, rank+1, file)
+			return nil, fmt.Errorf("fen %q: rank %d has %d files, expected 8", fen, rank+1, file)
 		}
 	}
 
@@ -87,8 +87,10 @@ func NewEngineFromFEN(fen string) (*Engine, bool, error) {
 	case "b":
 		whiteToMove = false
 	default:
-		return nil, false, fmt.Errorf("fen %q: invalid side to move %q", fen, fields[1])
+		return nil, fmt.Errorf("fen %q: invalid side to move %q", fen, fields[1])
 	}
+
+	e.WhiteToMove = whiteToMove
 
 	// field 2: castling rights
 	if fields[2] != "-" {
@@ -103,7 +105,7 @@ func NewEngineFromFEN(fen string) (*Engine, bool, error) {
 			case 'q':
 				e.blackCanCastleQueenSide = true
 			default:
-				return nil, false, fmt.Errorf("fen %q: invalid castling character %q", fen, c)
+				return nil, fmt.Errorf("fen %q: invalid castling character %q", fen, c)
 			}
 		}
 	}
@@ -113,7 +115,7 @@ func NewEngineFromFEN(fen string) (*Engine, bool, error) {
 		sq := fields[3]
 
 		if len(sq) != 2 || sq[0] < 'a' || sq[0] > 'h' || (sq[1] != '3' && sq[1] != '6') {
-			return nil, false, fmt.Errorf("fen %q: invalid en passant square %q", fen, sq)
+			return nil, fmt.Errorf("fen %q: invalid en passant square %q", fen, sq)
 		}
 
 		file := int(sq[0] - 'a')
@@ -131,5 +133,7 @@ func NewEngineFromFEN(fen string) (*Engine, bool, error) {
 		e.enPassantPieceMask = uint64(1) << (pawnRank*8 + file)
 	}
 
-	return e, whiteToMove, nil
+	e.computeHash()
+
+	return e, nil
 }

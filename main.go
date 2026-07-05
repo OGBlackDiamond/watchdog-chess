@@ -3,6 +3,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	_ "image/png"
 	"log"
 
@@ -19,7 +20,7 @@ const (
 	screenWidth  int = 8 * int(tileSize)
 	screenHeight int = 8 * int(tileSize)
 
-	watchdogDepth = 6
+	watchdogDepth = 7
 )
 
 var (
@@ -43,12 +44,15 @@ func (g *Game) Update() error {
 	}
 
 	// start a thread to pick a move
-	if whiteToMove != playAsWhite && !watchdogThinking {
+	if engine.WhiteToMove != playAsWhite && !watchdogThinking {
+
+		fmt.Println("Watchdog thinking...")
+
 		watchdogThinking = true
 		watchdogResultCh = make(chan watchdog.WatchdogResult, 1)
 
 		searchEngine := *engine
-		sideToMove := whiteToMove
+		sideToMove := engine.WhiteToMove
 
 		go func() {
 
@@ -66,6 +70,9 @@ func (g *Game) Update() error {
 	if watchdogThinking {
 		select {
 		case result := <-watchdogResultCh:
+
+			fmt.Println("Watchdog finished thinking!")
+
 			watchdogThinking = false
 
 			if result.Err != nil {
@@ -82,7 +89,6 @@ func (g *Game) Update() error {
 
 			lastMoveMade = result.Move
 
-			whiteToMove = !whiteToMove
 		default:
 			// do nothing
 		}

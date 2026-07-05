@@ -21,8 +21,6 @@ var (
 	clickedPiece chessengine.PieceInfo
 
 	playAsWhite = true
-
-	whiteToMove bool = true
 )
 
 func handleLeftPress() error {
@@ -114,9 +112,6 @@ func handleLeftRelease() error {
 	if didMakeMove {
 		lastMoveMade = moveMade
 	}
-
-	// a move was actually made if we make it here
-	whiteToMove = !whiteToMove
 
 	return nil
 }
