@@ -20,6 +20,7 @@ make            # vet + build -> bin/watchdog-chess
 # or just
 go run .
 ```
+<img width="792" height="791" alt="image" src="https://github.com/user-attachments/assets/4113d6e8-3662-47b6-8798-48cb543669ca" />
 
 Drag and drop pieces with the left mouse button. Which color you play is set
 by `playAsWhite` in `game.go`. The
