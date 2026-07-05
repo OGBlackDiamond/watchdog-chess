@@ -22,8 +22,8 @@ go run .
 ```
 
 Drag and drop pieces with the left mouse button. Which color you play is set
-by `playAsWhite` in `game.go` (currently black, so the bot moves first). The
-bot's search depth is `watchdogDepth` in `main.go`.
+by `playAsWhite` in `game.go`. The
+bot's search depth is `watchdogDepth` in `main.go`, this is 7 by default.
 
 ## Testing
 
@@ -57,13 +57,6 @@ then `go perft N`), pick the first move whose count differs, play it, and
 repeat one depth lower until the offending position is small enough to
 inspect by hand. `engine/fen.go` provides `NewEngineFromFEN` for setting up
 arbitrary positions.
-
-### Known failures
-
-Pawn promotion is not implemented yet, so the promotion-heavy positions
-(`position4`, `position5`, and `kiwipete` at depth 4) currently fail with
-node deficits that match the missing promotion moves. The failures are kept
-visible on purpose; they should disappear once promotions are added.
 
 ## Benchmarks
 
