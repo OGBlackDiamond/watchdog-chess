@@ -2,6 +2,7 @@ package board
 
 import "errors"
 
+// Move is a type that represents a move
 // move data represented in it's bits
 // format -> FFFFTTTTTTSSSSSS
 // where F = flag, T = Target square, S = start square
