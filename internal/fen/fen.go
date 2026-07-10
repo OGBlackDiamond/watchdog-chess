@@ -47,27 +47,37 @@ func NewBoardFromFen(fen string) (*board.Board, error) {
 				return nil, fmt.Errorf("fen %q: rank %d overflows 8 files", fen, rank+1)
 			}
 
-			mask := uint64(1) << (rank * 8 + file)
+			square := rank*8 + file
+			mask := uint64(1) << square
 
-			pieces := b.BlackPieces
+			pieces := &b.BlackPieces
+			colorMask := 0b0000
 			if c >= 'A' && c <= 'Z' {
-				pieces = b.WhitePieces
+				// white pieces are uppercase and carry the color bit (0b1000)
+				pieces = &b.WhitePieces
+				colorMask = 0b1000
 			}
 
 			// interesting switch syntax to catch upper and lower
 			switch c {
 			case 'p', 'P':
 				pieces.Pawns |= mask
+				b.MailBox[square] = board.Pawn + board.Piece(colorMask)
 			case 'r', 'R':
 				pieces.Rooks |= mask
+				b.MailBox[square] = board.Rook + board.Piece(colorMask)
 			case 'n', 'N':
 				pieces.Knights |= mask
+				b.MailBox[square] = board.Knight + board.Piece(colorMask)
 			case 'b', 'B':
 				pieces.Bishops |= mask
+				b.MailBox[square] = board.Bishop + board.Piece(colorMask)
 			case 'q', 'Q':
 				pieces.Queen |= mask
+				b.MailBox[square] = board.Queen + board.Piece(colorMask)
 			case 'k', 'K':
 				pieces.King |= mask
+				b.MailBox[square] = board.King + board.Piece(colorMask)
 			default:
 				return nil, fmt.Errorf("fen %q: invalid piece character %q", fen, c)
 			}

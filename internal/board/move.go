@@ -1,6 +1,10 @@
 package board
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+	"math/bits"
+)
 
 // Move is a type that represents a move
 // move data represented in it's bits
@@ -46,18 +50,18 @@ func (m *Move) ToAlgNot() string {
 	row, file, err := SquareToGrid(start)
 
 	if err != nil {
-		return string(NullMove())
+		return fmt.Sprint(NullMove())
 	}
 
-	algString += string(rune('a' + file) + rune('1' + row))
+	algString += string(rune('a' + file)) + string(rune('1' + row))
 
 	row, file, err = SquareToGrid(target)
 	
 	if err != nil {
-		return string(NullMove())
+		return fmt.Sprint(NullMove())
 	}
 
-	algString += string(rune('a' + file) + rune('1' + row))
+	algString += string(rune('a' + file)) + string(rune('1' + row))
 
 	flag := m.Flag()
 
@@ -85,7 +89,8 @@ func SquareToGrid(square int) (int, int, error) {
 		return -1, -1, errors.New("SquareToGrid failed with: square out of bounds")
 	}
 
-	row := 7 - (square / 8)
+	// a1 = 0 convention: rank index increases from rank 1 upward
+	row := square / 8
 	file := square % 8
 
 	return row, file, nil
@@ -95,7 +100,7 @@ func NewMove(startSquare int, targetSquare int, flag int) Move {
 	return Move(startSquare | targetSquare << 6 | flag << 12)
 }
 
-func MoveFromAlgNot(algString string) (Move, error) {
+func MoveFromAlgNot(algString string, b *Board) (Move, error) {
 
 	moveLen := len(algString)
 	if moveLen > 5 || moveLen < 4 {
@@ -125,10 +130,43 @@ func MoveFromAlgNot(algString string) (Move, error) {
 			return NullMove(), errors.New("MoveFromAlgNot failed with: invalid promotion char")
 
 		}
-	
 
 	}
 
+
+	startString := algString[:2]
+	targetString := algString[2:]
+
+	startSquare = AlgNotToSpace(startString)
+	targetSquare = AlgNotToSpace(targetString)
+
+	// derive a special flag when we don't already have a promotion.
+	if flag == NoFlag {
+		startType := b.MailBox[startSquare]
+
+		startFile := startSquare % 8
+		targetFile := targetSquare % 8
+		delta := targetSquare - startSquare
+
+		switch {
+		// castling: the king moves two files (e.g. e1g1, e1c1)
+		case startType.Type() == King && absInt(targetFile-startFile) == 2:
+			flag = CastleFlag
+
+		// double pawn push: pawn advances two ranks
+		case startType.Type() == Pawn && absInt(delta) == 16:
+			flag = PawnTwoUpFlag
+
+		// en passant: pawn moves diagonally onto the recorded target square,
+		// which is empty (a normal diagonal move captures an occupant)
+		case startType.Type() == Pawn &&
+			b.MailBox[targetSquare] == NONE &&
+			startFile != targetFile &&
+			b.EnPassantTarget != 0 &&
+			targetSquare == bits.TrailingZeros64(b.EnPassantTarget):
+			flag = EnPassantCaptureFlag
+		}
+	}
 
 	return NewMove(startSquare, targetSquare, flag), nil
 
@@ -138,12 +176,21 @@ func NullMove() Move {
 	return Move(0)
 }
 
+func absInt(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
 func AlgNotToSpace(algString string) int {
 
 	runeSlice := []rune(algString)
 
 	file := runeSlice[0]
 	row := runeSlice[1]
+	rank := int(row - '1')
 
-	return int((7 - row) - '1') * 8 + int(file - 'a')
+	// a1 = 0 convention: a1 -> 0, h1 -> 7, a8 -> 56, h8 -> 63
+	return rank*8 + int(file-'a')
 }

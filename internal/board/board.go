@@ -1,7 +1,10 @@
 // Package board handles maintaining the board state, as well as move generation
 package board
 
-import "errors"
+import (
+	"errors"
+	"math/bits"
+)
 
 // Board is a struct representing a board state - it should be initialized from the `fen` package
 type Board struct {
@@ -10,7 +13,7 @@ type Board struct {
 BlackPieces Pieces
 
 	// piece lookup so we don't have to scan for bitboards
-	mailBox [64]Piece
+	MailBox [64]Piece
 
 	//PlayAsWhite bool
 	WhiteToMove bool
@@ -60,6 +63,15 @@ func (b *Board) MakeMove(move Move) error {
 
 	moveFlag := move.Flag()
 
+	startType := b.MailBox[startSquare]
+	targetType := b.MailBox[targetSquare]
+
+	// clear a captured piece from the target square before we overwrite it,
+	// otherwise placing the moving piece there would be wiped out again
+	if targetType != NONE {
+		b.clearSquare(targetSquare, targetType)
+	}
+
 	// if there is a promotion
 	if moveFlag > 3 {
 	
@@ -77,34 +89,52 @@ func (b *Board) MakeMove(move Move) error {
 		}
 
 
-		if b.mailBox[startSquare].IsWhite() {
+		if b.MailBox[startSquare].IsWhite() {
 			p += Piece(8) // add the white bit
 		}
 
 		b.setSquare(targetSquare, p)
 	} else {
 		// if no promotion, just set the sqare with the same piece
-		b.setSquare(targetSquare, b.mailBox[startSquare])
+		b.setSquare(targetSquare, startType)
 	}
 
-	b.clearSquare(startSquare, b.mailBox[startSquare])
+	b.clearSquare(startSquare, startType)
 
-	targetType := b.mailBox[targetSquare]
-	if targetType != NONE {
-		b.clearSquare(targetSquare, targetType)
+
+	switch moveFlag {
+	case EnPassantCaptureFlag:
+
+		p := Pawn
+
+		if b.MailBox[startSquare].IsWhite() {
+			p += Piece(8) // add the white bit
+		}
+
+		b.clearSquare(bits.TrailingZeros64((b.EnPassantPieceMask)), p)
+
+	case PawnTwoUpFlag:
+
+		// the en-passant target sits behind the pawn (a1 = 0 convention).
+		// a black pawn double-pushes downward in index, so behind it is a
+		// higher index (+8); a white pawn pushes upward, so behind it is a
+		// lower index (-8).
+		direction := 1
+		if startType.IsWhite() {
+			direction = -1
+		}
+
+		b.EnPassantPieceMask = uint64(1) << targetSquare
+		b.EnPassantTarget = uint64(1) << (targetSquare + (8 * direction))
+
 	}
 
-	if moveFlag == EnPassantCaptureFlag {
-
-		
-
-	}
 
 	return nil
 }
 
 func (b *Board) MakeMoveFromAlgNot(algString string) error {
-	move, err := MoveFromAlgNot(algString)
+	move, err := MoveFromAlgNot(algString, b)
 	if err != nil {
 		return errors.New("MakeMoveFromAlgNot failed with: " + err.Error())
 	}
@@ -132,10 +162,10 @@ func (b *Board) bitboard(p Piece) *uint64 {
 
 func (b *Board) setSquare(sq int, p Piece) {
     *b.bitboard(p) |= uint64(1) << sq
-    b.mailBox[sq] = p
+    b.MailBox[sq] = p
 }
 
 func (b *Board) clearSquare(sq int, p Piece) {
     *b.bitboard(p) &^= uint64(1) << sq
-    b.mailBox[sq] = NONE
+    b.MailBox[sq] = NONE
 }
