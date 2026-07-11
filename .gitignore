@@ -27,7 +27,12 @@ go.work.sum
 # env file
 .env
 
-watchdog-chess
+# don't track log files
+logs*
+*.csv
+
+# don't track the binary
+*watchdog-chess
 
 # Editor/IDE
 # .idea/
