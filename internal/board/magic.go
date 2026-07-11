@@ -1,18 +1,18 @@
-package board 
+package board
 
 import "math/bits"
 
 // Magic bitboard tables for sliding-piece attacks.
 
 type magicEntry struct {
-	mask    uint64 
+	mask    uint64
 	magic   uint64
 	shift   uint
 	attacks []uint64
 }
 
 var (
-	rookMagics [64]magicEntry
+	rookMagics   [64]magicEntry
 	bishopMagics [64]magicEntry
 )
 

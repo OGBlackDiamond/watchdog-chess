@@ -3,6 +3,7 @@ package board
 
 import (
 	"errors"
+	"fmt"
 	"math/bits"
 )
 
@@ -13,7 +14,7 @@ type Board struct {
 
 	WhiteOccupancy uint64
 	BlackOccupancy uint64
-	Occupancy uint64
+	Occupancy      uint64
 
 	// piece lookup so we don't have to scan for bitboards
 	MailBox [64]Piece
@@ -56,6 +57,20 @@ const (
 	NONE   Piece = 0b0000
 )
 
+const (
+	whitePawnStartingRank  uint64 = 0x000000000000FF00
+	whitePawnPromotionRank uint64 = 0xFF00000000000000
+
+	blackPawnStartingRank  uint64 = 0x00FF000000000000
+	blackPawnPromotionRank uint64 = 0x00000000000000FF
+)
+
+// starting king squares
+const (
+	whiteHome = 4  // e1
+	blackHome = 60 // e8
+)
+
 // MakeMove makes a move according to a proper move object
 func (b *Board) MakeMove(move Move) error {
 
@@ -87,6 +102,8 @@ func (b *Board) MakeMove(move Move) error {
 			p = Bishop
 		case PromoteToQueenFlag:
 			p = Queen
+		default:
+			return errors.New("invalid flag in MakeMove")
 		}
 
 		if b.MailBox[startSquare].IsWhite() {
@@ -99,34 +116,12 @@ func (b *Board) MakeMove(move Move) error {
 		b.setSquare(targetSquare, startType)
 	}
 
+	oldEnPassantMask := b.EnPassantPieceMask
+
+	b.UpdateConditionalMoveState(move, startType, targetType)
+
 	b.clearSquare(startSquare, startType)
-
-	switch moveFlag {
-	case EnPassantCaptureFlag:
-
-		p := Pawn
-
-		if b.MailBox[startSquare].IsWhite() {
-			p += Piece(8) // add the white bit
-		}
-
-		b.clearSquare(bits.TrailingZeros64((b.EnPassantPieceMask)), p)
-
-	case PawnTwoUpFlag:
-
-		// the en-passant target sits behind the pawn (a1 = 0 convention).
-		// a black pawn double-pushes downward in index, so behind it is a
-		// higher index (+8); a white pawn pushes upward, so behind it is a
-		// lower index (-8).
-		direction := 1
-		if startType.IsWhite() {
-			direction = -1
-		}
-
-		b.EnPassantPieceMask = setBit(b.EnPassantPieceMask, targetSquare)
-		b.EnPassantTarget = setBit(b.EnPassantTarget, targetSquare + (8 * direction))
-
-	}
+	b.MakeConditionalMoves(move, startType, oldEnPassantMask)
 
 	b.WhiteToMove = !b.WhiteToMove
 
@@ -140,6 +135,100 @@ func (b *Board) MakeMoveFromAlgNot(algString string) error {
 	}
 
 	return b.MakeMove(move)
+}
+
+func (b *Board) UpdateConditionalMoveState(move Move, startType Piece, targetType Piece) {
+
+	switch startType.Type() {
+	case King:
+		if startType.IsWhite() {
+			b.WhiteCanCastleKingSide = false
+			b.WhiteCanCastleQueenSide = false
+		} else {
+			b.BlackCanCastleKingSide = false
+			b.BlackCanCastleQueenSide = false
+		}
+	case Rook:
+		startSquare := move.StartSquare()
+		if startType.IsWhite() {
+			switch startSquare {
+			case 0:
+				b.WhiteCanCastleQueenSide = false
+			case 7:
+				b.WhiteCanCastleKingSide = false
+			}
+		} else {
+			switch startSquare {
+			case 56:
+				b.BlackCanCastleQueenSide = false
+			case 63:
+				b.BlackCanCastleKingSide = false
+			}
+		}
+	}
+
+	if targetType.Type() == Rook {
+		switch move.TargetSquare() {
+		case 0:
+			b.WhiteCanCastleQueenSide = false
+		case 7:
+			b.WhiteCanCastleKingSide = false
+		case 56:
+			b.BlackCanCastleQueenSide = false
+		case 63:
+			b.BlackCanCastleKingSide = false
+		}
+	}
+
+	b.EnPassantPieceMask = uint64(0)
+	b.EnPassantTarget = uint64(0)
+}
+
+func (b *Board) MakeConditionalMoves(move Move, startType Piece, oldEnPassantMask uint64) {
+	startSquare := move.StartSquare()
+	targetSquare := move.TargetSquare()
+
+	switch move.Flag() {
+	case CastleFlag:
+		rook := Rook
+		if startType.IsWhite() {
+			rook += Piece(8)
+		}
+
+		var rookFrom, rookTo int
+		if targetSquare > startSquare {
+			// king-side castle: rook moves from h-file to the square the king crossed.
+			rookFrom = targetSquare + 1
+			rookTo = targetSquare - 1
+		} else {
+			// queen-side castle: rook moves from a-file to the square the king crossed.
+			rookFrom = targetSquare - 2
+			rookTo = targetSquare + 1
+		}
+
+		b.clearSquare(rookFrom, rook)
+		b.setSquare(rookTo, rook)
+
+	case EnPassantCaptureFlag:
+		capturedPawn := Pawn
+		if !startType.IsWhite() {
+			capturedPawn += Piece(8)
+		}
+
+		b.clearSquare(bits.TrailingZeros64(oldEnPassantMask), capturedPawn)
+
+	case PawnTwoUpFlag:
+		// The en-passant target sits behind the pawn (a1 = 0 convention).
+		// A black pawn double-pushes downward in index, so behind it is a
+		// higher index (+8); a white pawn pushes upward, so behind it is lower (-8).
+		direction := 1
+		if startType.IsWhite() {
+			direction = -1
+		}
+
+		b.EnPassantPieceMask = setBit(b.EnPassantPieceMask, targetSquare)
+		b.EnPassantTarget = setBit(b.EnPassantTarget, targetSquare+(8*direction))
+	}
 }
 
 // returns a pointer to the bitboard for a given color+piece
@@ -162,11 +251,13 @@ func (b *Board) bitboard(p Piece) *uint64 {
 	case King:
 		return &pieces.King
 	}
+	fmt.Println("info string bitboard() returned nil")
 	return nil
 }
 
 func (b *Board) setSquare(sq int, p Piece) {
-	*b.bitboard(p) = setBit(*b.bitboard(p), sq)
+	bb := b.bitboard(p)
+	*bb = setBit(*bb, sq)
 	b.MailBox[sq] = p
 
 	// update the cached Occupancy
@@ -179,9 +270,10 @@ func (b *Board) setSquare(sq int, p Piece) {
 }
 
 func (b *Board) clearSquare(sq int, p Piece) {
-	*b.bitboard(p) = clearBit(*b.bitboard(p), sq)
+	bb := b.bitboard(p)
+	*bb = clearBit(*bb, sq)
 	b.MailBox[sq] = NONE
-	
+
 	// update the cached occupancy
 	b.Occupancy = clearBit(b.Occupancy, sq)
 	if p.IsWhite() {
@@ -193,20 +285,20 @@ func (b *Board) clearSquare(sq int, p Piece) {
 
 func (b *Board) GenWhiteOccupancy() uint64 {
 	return b.WhitePieces.Pawns |
-			b.WhitePieces.Knights |
-			b.WhitePieces.Knights |
-			b.WhitePieces.Bishops |
-			b.WhitePieces.Queen |
-			b.WhitePieces.King
+		b.WhitePieces.Rooks |
+		b.WhitePieces.Knights |
+		b.WhitePieces.Bishops |
+		b.WhitePieces.Queen |
+		b.WhitePieces.King
 }
 
 func (b *Board) GenBlackOccupancy() uint64 {
-	return b.WhitePieces.Pawns |
-			b.WhitePieces.Knights |
-			b.WhitePieces.Knights |
-			b.WhitePieces.Bishops |
-			b.WhitePieces.Queen |
-			b.WhitePieces.King
+	return b.BlackPieces.Pawns |
+		b.BlackPieces.Rooks |
+		b.BlackPieces.Knights |
+		b.BlackPieces.Bishops |
+		b.BlackPieces.Queen |
+		b.BlackPieces.King
 }
 
 // fileOf and rankOf for a square.
@@ -217,5 +309,4 @@ func onBoard(f, r int) bool { return f >= 0 && f < 8 && r >= 0 && r < 8 }
 
 func setBit(b uint64, sq int) uint64   { return b | (1 << uint(sq)) }
 func clearBit(b uint64, sq int) uint64 { return b &^ (1 << uint(sq)) }
-func testBit(b uint64, sq int) bool      { return b&(1<<uint(sq)) != 0 }
-
+func testBit(b uint64, sq int) bool    { return b&(1<<uint(sq)) != 0 }

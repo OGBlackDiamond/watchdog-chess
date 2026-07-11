@@ -47,21 +47,21 @@ func (m *Move) ToAlgNot() string {
 
 	var algString string
 
-	row, file, err := SquareToGrid(start)
+	file, rank, err := SquareToGrid(start)
 
 	if err != nil {
 		return fmt.Sprint(NullMove())
 	}
 
-	algString += string(rune('a'+file)) + string(rune('1'+row))
+	algString += string(rune('a'+file)) + string(rune('1'+rank))
 
-	row, file, err = SquareToGrid(target)
+	file, rank, err = SquareToGrid(target)
 
 	if err != nil {
 		return fmt.Sprint(NullMove())
 	}
 
-	algString += string(rune('a'+file)) + string(rune('1'+row))
+	algString += string(rune('a'+file)) + string(rune('1'+rank))
 
 	flag := m.Flag()
 
@@ -83,17 +83,34 @@ func (m *Move) ToAlgNot() string {
 	return algString
 }
 
-func SquareToGrid(square int) (int, int, error) {
+// SquareToGrid converts a 0-63 square index into (file, rank) coordinates.
+// a1 = 0 convention: file (a..h) = 0..7, rank (1..8) = 0..7, both increasing.
+func SquareToGrid(square int) (file int, rank int, err error) {
 
 	if square > 63 || square < 0 {
 		return -1, -1, errors.New("SquareToGrid failed with: square out of bounds")
 	}
 
-	// a1 = 0 convention: rank index increases from rank 1 upward
-	row := square / 8
-	file := square % 8
+	file = square % 8
+	rank = square / 8
 
-	return row, file, nil
+	return file, rank, nil
+}
+
+// MaskToGrid converts a single-bit mask into (file, rank) coordinates.
+func MaskToGrid(mask uint64) (file int, rank int, err error) {
+	return SquareToGrid(bits.TrailingZeros64(mask))
+}
+
+// GridToMask converts (file, rank) coordinates into a single-bit mask.
+func GridToMask(file, rank int) (uint64, bool) {
+	if !onBoard(file, rank) {
+		return uint64(0), false
+	}
+
+	mask := uint64(1) << (rank*8 + file)
+
+	return mask, true
 }
 
 func NewMove(startSquare int, targetSquare int, flag int) Move {

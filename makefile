@@ -1,5 +1,7 @@
 .DEFAULT_GOAL := build
 
+BINARY := watchdog-chess
+
 fmt:
 	go fmt ./...
 
@@ -10,24 +12,40 @@ vet: fmt
 	go vet ./...
 
 build: vet
-	go build -o bin/watchdog-chess .
+	go build -o bin/$(BINARY) .
 
-# quick correctness check (shallow perft only, a few seconds)
+run:
+	go run .
+
+# quick correctness check (skips long perft cases)
 test-short:
 	go test -short ./...
 
-# full perft suite (excludes tierDeep cases)
-test: vet
+# full package test suite
+test-full:
 	go test ./...
 
-# deep perft cases too; can take a long time on a slow move generator
-test-deep:
-	PERFT_DEEP=1 go test -timeout 120m ./...
+test: test-short
 
-# move generation speed baseline: record ns/op and allocs/op before and
-# after any optimization
+# short perft suite (skips deepest cases)
+perft:
+	go test ./internal/perft/ -short -v
+
+# full perft suite, including deeper standard positions
+perft-full:
+	go test ./internal/perft/ -v
+
+# compatibility alias for deeper perft runs
+test-deep:
+	go test ./internal/perft/ -v
+
+# Run all Go benchmarks with allocation reporting. Packages without Benchmark...
+# functions report no benchmarks.
 bench:
-	go test ./engine -bench . -benchmem -run '^$$'
+	go test ./... -run '^$$' -bench . -benchmem
+
+bench-perft:
+	go test ./internal/perft/ -run '^$$' -bench . -benchmem
 
 clean:
 	rm -rf bin

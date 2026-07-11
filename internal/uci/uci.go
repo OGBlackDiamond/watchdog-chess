@@ -55,7 +55,12 @@ func StartUCIHandler() error {
 
 		case "go":
 			// start the engine searching
-			fmt.Println("bestmove d7d5")
+			//fmt.Println("bestmove d7d5")
+			randMove, err := boardState.GenerateLegalMovesForPosition()
+			if err != nil {
+				return err
+			}
+			fmt.Printf("bestmove %s\n", randMove[0].ToAlgNot())
 
 		case "stop":
 			// stop the engine searching

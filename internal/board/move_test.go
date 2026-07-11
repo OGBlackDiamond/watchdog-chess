@@ -20,7 +20,7 @@ func TestAlgNotToSpace(t *testing.T) {
 	}
 }
 
-// TestSquareToGrid verifies the inverse mapping from index to (row, file).
+// TestSquareToGrid verifies the mapping from index to (file, rank).
 func TestSquareToGrid(t *testing.T) {
 	if _, _, err := SquareToGrid(64); err == nil {
 		t.Error("SquareToGrid(64) should return an out-of-bounds error")
@@ -28,10 +28,25 @@ func TestSquareToGrid(t *testing.T) {
 	if _, _, err := SquareToGrid(-1); err == nil {
 		t.Error("SquareToGrid(-1) should return an out-of-bounds error")
 	}
-	// a1 = 0: index 0 is rank 0 (rank 1), file 0 (a-file)
-	row, file, err := SquareToGrid(0)
-	if err != nil || row != 0 || file != 0 {
-		t.Errorf("SquareToGrid(0) = (%d,%d,%v), want (0,0,nil)", row, file, err)
+
+	// a1 = 0 convention, (file, rank) ordering.
+	cases := []struct {
+		square             int
+		wantFile, wantRank int
+	}{
+		{0, 0, 0},  // a1
+		{7, 7, 0},  // h1
+		{56, 0, 7}, // a8
+		{63, 7, 7}, // h8
+		{49, 1, 6}, // b7
+		{5, 5, 0},  // f1
+	}
+	for _, c := range cases {
+		file, rank, err := SquareToGrid(c.square)
+		if err != nil || file != c.wantFile || rank != c.wantRank {
+			t.Errorf("SquareToGrid(%d) = (file=%d,rank=%d,%v), want (file=%d,rank=%d,nil)",
+				c.square, file, rank, err, c.wantFile, c.wantRank)
+		}
 	}
 }
 
