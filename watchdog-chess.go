@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"runtime"
 
 	"github.com/OGBlackDiamond/watchdog-chess/internal/uci"
 )
@@ -22,6 +23,11 @@ func main() {
 
 	fmt.Println("id name " + engineName)
 	fmt.Println("id author " + author)
+
+	numThreads := runtime.NumCPU()
+
+	fmt.Println("option name NumaPolicy type string default <empty>")
+	fmt.Printf("option name Threads type spin default %d min 1 max %d\n", numThreads, numThreads)
 
 	// we can do other setup things here
 

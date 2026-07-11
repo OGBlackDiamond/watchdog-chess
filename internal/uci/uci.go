@@ -6,9 +6,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 
 	"github.com/OGBlackDiamond/watchdog-chess/internal/board"
+	"github.com/OGBlackDiamond/watchdog-chess/internal/engine"
 	"github.com/OGBlackDiamond/watchdog-chess/internal/fen"
 )
 
@@ -21,6 +23,8 @@ var (
 
 // StartUCIHandler handles all general UCI command throughput
 func StartUCIHandler() error {
+
+	numCoresToUse := runtime.NumCPU()
 
 	scanner := bufio.NewScanner(os.Stdin)
 
@@ -56,11 +60,11 @@ func StartUCIHandler() error {
 		case "go":
 			// start the engine searching
 			//fmt.Println("bestmove d7d5")
-			randMove, err := boardState.GenerateLegalMovesForPosition()
+			bestMove, _, err := engine.ChooseMove(&boardState, 7, numCoresToUse)
 			if err != nil {
 				return err
 			}
-			fmt.Printf("bestmove %s\n", randMove[0].ToAlgNot())
+			fmt.Printf("bestmove %s\n", bestMove.ToAlgNot())
 
 		case "stop":
 			// stop the engine searching

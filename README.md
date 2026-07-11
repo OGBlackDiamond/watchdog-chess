@@ -2,6 +2,8 @@
 
 A UCI chess engine written in Go.
 
+[V1](https://github.com/OGBlackDiamond/watchdog-chess/tree/v1) is also a chess engine, but it doesn't speak UCI. It is significantly weaker than this engine and has it's own builtin GUI.
+
 ## Running
 
 Run the engine directly:
