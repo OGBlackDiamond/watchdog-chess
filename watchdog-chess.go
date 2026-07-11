@@ -8,9 +8,8 @@ import (
 
 const (
 	engineName string = "Watchdog"
-	author string = "OGBlackDiamond - Caden Feller"
+	author     string = "OGBlackDiamond - Caden Feller"
 )
-
 
 func main() {
 
@@ -26,12 +25,13 @@ func main() {
 
 	// we can do other setup things here
 
-
 	// tell the GUI we're ready
 	fmt.Println("uciok")
 
 	// this starts UCI talks
 	// all processing will happen in threads so this blocking main is fine
-	uci.StartUCIHandler()
+	if err := uci.StartUCIHandler(); err != nil {
+		fmt.Println("UCI failed with: " + err.Error())
+	}
 
 }

@@ -13,7 +13,6 @@ import (
 // StartingPositionFEN is the FEN string for the standard chess starting position.
 const StartingPositionFEN = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 
-
 func NewBoardFromFen(fen string) (*board.Board, error) {
 
 	fields := strings.Fields(strings.TrimSpace(fen))
@@ -36,7 +35,7 @@ func NewBoardFromFen(fen string) (*board.Board, error) {
 		file := 0
 
 		for _, c := range rankStr {
-			
+
 			// spaces
 			if c >= '1' && c <= '8' {
 				file += int(c - '0')
@@ -91,6 +90,9 @@ func NewBoardFromFen(fen string) (*board.Board, error) {
 		}
 	}
 
+	b.WhiteOccupancy = b.GenWhiteOccupancy()
+	b.BlackOccupancy = b.GenBlackOccupancy()
+	b.Occupancy = b.WhiteOccupancy | b.BlackOccupancy
 
 	// field 1, side to move
 	switch fields[1] {
@@ -142,7 +144,6 @@ func NewBoardFromFen(fen string) (*board.Board, error) {
 		b.EnPassantTarget = uint64(1) << (rank*8 + file)
 		b.EnPassantPieceMask = uint64(1) << (pawnRank*8 + file)
 	}
-	
 
 	return b, nil
 

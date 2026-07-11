@@ -14,18 +14,18 @@ type Move uint16
 
 // named values for the flag spots
 const (
-	NoFlag = 0b0000
+	NoFlag               = 0b0000
 	EnPassantCaptureFlag = 0b0001
-	CastleFlag = 0b0010
-	PawnTwoUpFlag = 0b0011
-	PromoteToRookFlag = 0b0100
-	PromoteToKnightFlag = 0b0101
-	PromoteToBishopFlag = 0b0110
-	PromoteToQueenFlag = 0b0111
+	CastleFlag           = 0b0010
+	PawnTwoUpFlag        = 0b0011
+	PromoteToRookFlag    = 0b0100
+	PromoteToKnightFlag  = 0b0101
+	PromoteToBishopFlag  = 0b0110
+	PromoteToQueenFlag   = 0b0111
 
-	startSquareMask uint16 = 0b0000000000111111
+	startSquareMask  uint16 = 0b0000000000111111
 	targetSquareMask uint16 = 0b0000111111000000
-	flagMask uint16 = 0b1111000000000000
+	flagMask         uint16 = 0b1111000000000000
 )
 
 func (m *Move) StartSquare() int {
@@ -33,11 +33,11 @@ func (m *Move) StartSquare() int {
 }
 
 func (m *Move) TargetSquare() int {
-	return int(uint16(*m) & targetSquareMask) >> 6
+	return int(uint16(*m)&targetSquareMask) >> 6
 }
 
 func (m *Move) Flag() int {
-	return int(uint16(*m) & flagMask) >> 12
+	return int(uint16(*m)&flagMask) >> 12
 }
 
 func (m *Move) ToAlgNot() string {
@@ -53,15 +53,15 @@ func (m *Move) ToAlgNot() string {
 		return fmt.Sprint(NullMove())
 	}
 
-	algString += string(rune('a' + file)) + string(rune('1' + row))
+	algString += string(rune('a'+file)) + string(rune('1'+row))
 
 	row, file, err = SquareToGrid(target)
-	
+
 	if err != nil {
 		return fmt.Sprint(NullMove())
 	}
 
-	algString += string(rune('a' + file)) + string(rune('1' + row))
+	algString += string(rune('a'+file)) + string(rune('1'+row))
 
 	flag := m.Flag()
 
@@ -97,7 +97,7 @@ func SquareToGrid(square int) (int, int, error) {
 }
 
 func NewMove(startSquare int, targetSquare int, flag int) Move {
-	return Move(startSquare | targetSquare << 6 | flag << 12)
+	return Move(startSquare | targetSquare<<6 | flag<<12)
 }
 
 func MoveFromAlgNot(algString string, b *Board) (Move, error) {
@@ -108,9 +108,9 @@ func MoveFromAlgNot(algString string, b *Board) (Move, error) {
 	}
 
 	var (
-		startSquare int
+		startSquare  int
 		targetSquare int
-		flag = NoFlag
+		flag         = NoFlag
 	)
 
 	if moveLen == 5 {
@@ -132,7 +132,6 @@ func MoveFromAlgNot(algString string, b *Board) (Move, error) {
 		}
 
 	}
-
 
 	startString := algString[:2]
 	targetString := algString[2:]

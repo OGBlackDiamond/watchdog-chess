@@ -240,9 +240,9 @@ func TestMakeMoveEnPassantCapture(t *testing.T) {
 	// White pawn on e5 captures en passant onto d6, removing the black
 	// pawn that just double-pushed to d5.
 	b := &Board{}
-	from := sq(t, "e5")     // capturing white pawn
-	to := sq(t, "d6")       // empty landing square
-	victim := sq(t, "d5")   // black pawn to be removed
+	from := sq(t, "e5")   // capturing white pawn
+	to := sq(t, "d6")     // empty landing square
+	victim := sq(t, "d5") // black pawn to be removed
 
 	b.setSquare(from, Pawn+Piece(8)) // white pawn
 	b.setSquare(victim, Pawn)        // black pawn
