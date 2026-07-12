@@ -15,27 +15,29 @@ import (
 //
 // It uses copy-make recursion: Board is a flat value type, so copying it to
 // produce a child position is cheap and avoids the need for an UndoMove.
+// Move generation is pseudo-legal, so every move must be made and verified
+// (king not left in check) before being counted - including at depth 1.
 func Perft(b *board.Board, depth int) (uint64, error) {
 	if depth == 0 {
 		return 1, nil
 	}
 
-	moves, err := b.GenerateLegalMovesForPosition()
-	if err != nil {
-		return 0, err
-	}
-
-	// At depth 1 the number of legal moves is the node count, so we can avoid
-	// the extra layer of copy-make + recursion.
-	if depth == 1 {
-		return uint64(len(moves)), nil
-	}
+	moves := b.GeneratePseudoLegalMoves(make([]board.Move, 0, 64))
 
 	var nodes uint64
 	for _, move := range moves {
 		child := *b
 		if err := child.MakeMove(move); err != nil {
 			return 0, err
+		}
+
+		if child.KingIsChecked(b.WhiteToMove) {
+			continue // pseudo-legal move left the mover's king in check
+		}
+
+		if depth == 1 {
+			nodes++
+			continue
 		}
 
 		sub, err := Perft(&child, depth-1)
@@ -60,24 +62,21 @@ type DivideEntry struct {
 // for locating a move-generation discrepancy: compare the per-move breakdown
 // against a reference engine to find which subtree diverges.
 func Divide(b *board.Board, depth int) ([]DivideEntry, uint64, error) {
-	moves, err := b.GenerateLegalMovesForPosition()
-	if err != nil {
-		return nil, 0, err
-	}
+	moves := b.GenerateLegalMovesForPosition()
 
 	entries := make([]DivideEntry, 0, len(moves))
 	var total uint64
 
 	for _, move := range moves {
-		var sub uint64
+		var sub uint64 = 1
 
-		if depth <= 1 {
-			sub = 1
-		} else {
+		if depth > 1 {
 			child := *b
 			if err := child.MakeMove(move); err != nil {
 				return nil, 0, err
 			}
+
+			var err error
 			sub, err = Perft(&child, depth-1)
 			if err != nil {
 				return nil, 0, err

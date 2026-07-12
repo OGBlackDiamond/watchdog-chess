@@ -194,7 +194,7 @@ func TestMakeMoveCapture(t *testing.T) {
 		t.Errorf("e5 should hold the capturing white pawn, got %v", b.MailBox[to])
 	}
 	// the black pawn's bit must be cleared from its bitboard
-	if b.BlackPieces.Pawns&(uint64(1)<<to) != 0 {
+	if b.Bitboards[Pawn]&(uint64(1)<<to) != 0 {
 		t.Errorf("captured black pawn bit still set on e5")
 	}
 }
@@ -274,7 +274,7 @@ func TestMakeMoveEnPassantCapture(t *testing.T) {
 	if b.MailBox[victim] != NONE {
 		t.Errorf("d5 (captured pawn) should be empty, got %v", b.MailBox[victim])
 	}
-	if b.BlackPieces.Pawns&(uint64(1)<<victim) != 0 {
+	if b.Bitboards[Pawn]&(uint64(1)<<victim) != 0 {
 		t.Errorf("black pawn bit on d5 should be cleared")
 	}
 	if b.MailBox[from] != NONE {

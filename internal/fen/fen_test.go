@@ -40,25 +40,27 @@ func TestParserPopulatesBitboards(t *testing.T) {
 
 	bit := func(alg string) uint64 { return uint64(1) << board.AlgNotToSpace(alg) }
 
+	white := func(p board.Piece) board.Piece { return p + board.Piece(8) }
+
 	// white pawns on rank 2, black pawns on rank 7
-	if b.WhitePieces.Pawns&bit("e2") == 0 {
+	if b.Bitboards[white(board.Pawn)]&bit("e2") == 0 {
 		t.Errorf("white pawn bit on e2 not set")
 	}
-	if b.BlackPieces.Pawns&bit("e7") == 0 {
+	if b.Bitboards[board.Pawn]&bit("e7") == 0 {
 		t.Errorf("black pawn bit on e7 not set")
 	}
 	// rooks on the corners
-	if b.WhitePieces.Rooks&bit("a1") == 0 || b.WhitePieces.Rooks&bit("h1") == 0 {
+	if b.Bitboards[white(board.Rook)]&bit("a1") == 0 || b.Bitboards[white(board.Rook)]&bit("h1") == 0 {
 		t.Errorf("white rooks not set on a1/h1")
 	}
-	if b.BlackPieces.King&bit("e8") == 0 {
+	if b.Bitboards[board.King]&bit("e8") == 0 {
 		t.Errorf("black king bit on e8 not set")
 	}
-	if b.WhitePieces.King&bit("e1") == 0 {
+	if b.Bitboards[white(board.King)]&bit("e1") == 0 {
 		t.Errorf("white king bit on e1 not set")
 	}
 	// full starting position has 16 pawns
-	if got := bitCount(b.WhitePieces.Pawns | b.BlackPieces.Pawns); got != 16 {
+	if got := bitCount(b.Bitboards[white(board.Pawn)] | b.Bitboards[board.Pawn]); got != 16 {
 		t.Errorf("expected 16 pawns, got %d", got)
 	}
 }

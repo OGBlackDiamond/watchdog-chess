@@ -3,18 +3,19 @@ package board
 
 import (
 	"errors"
-	"fmt"
 	"math/bits"
 )
 
 // Board is a struct representing a board state - it should be initialized from the `fen` package
 type Board struct {
-	WhitePieces Pieces
-	BlackPieces Pieces
+	Bitboards [16]uint64
 
 	WhiteOccupancy uint64
 	BlackOccupancy uint64
 	Occupancy      uint64
+
+	// the value of the material + PST that will just update in real time
+	MaterialPST int
 
 	// piece lookup so we don't have to scan for bitboards
 	MailBox [64]Piece
@@ -29,15 +30,6 @@ type Board struct {
 
 	EnPassantTarget    uint64
 	EnPassantPieceMask uint64
-}
-
-type Pieces struct {
-	Pawns   uint64
-	Rooks   uint64
-	Knights uint64
-	Bishops uint64
-	Queen   uint64
-	King    uint64
 }
 
 // Piece is an enumeration of piece types
@@ -233,26 +225,7 @@ func (b *Board) MakeConditionalMoves(move Move, startType Piece, oldEnPassantMas
 
 // returns a pointer to the bitboard for a given color+piece
 func (b *Board) bitboard(p Piece) *uint64 {
-	pieces := &b.BlackPieces
-	if p.IsWhite() {
-		pieces = &b.WhitePieces
-	}
-	switch p.Type() {
-	case Pawn:
-		return &pieces.Pawns
-	case Rook:
-		return &pieces.Rooks
-	case Knight:
-		return &pieces.Knights
-	case Bishop:
-		return &pieces.Bishops
-	case Queen:
-		return &pieces.Queen
-	case King:
-		return &pieces.King
-	}
-	fmt.Println("info string bitboard() returned nil")
-	return nil
+	return &b.Bitboards[p]
 }
 
 func (b *Board) setSquare(sq int, p Piece) {
@@ -260,12 +233,16 @@ func (b *Board) setSquare(sq int, p Piece) {
 	*bb = setBit(*bb, sq)
 	b.MailBox[sq] = p
 
+	v := PieceValue(p) + pieceSquareValue(p, sq)
+
 	// update the cached Occupancy
 	b.Occupancy = setBit(b.Occupancy, sq)
 	if p.IsWhite() {
 		b.WhiteOccupancy = setBit(b.WhiteOccupancy, sq)
+		b.MaterialPST += v
 	} else {
 		b.BlackOccupancy = setBit(b.BlackOccupancy, sq)
+		b.MaterialPST -= v
 	}
 }
 
@@ -274,31 +251,39 @@ func (b *Board) clearSquare(sq int, p Piece) {
 	*bb = clearBit(*bb, sq)
 	b.MailBox[sq] = NONE
 
+	v := PieceValue(p) + pieceSquareValue(p, sq)
+
 	// update the cached occupancy
 	b.Occupancy = clearBit(b.Occupancy, sq)
 	if p.IsWhite() {
 		b.WhiteOccupancy = clearBit(b.WhiteOccupancy, sq)
+		b.MaterialPST -= v
 	} else {
 		b.BlackOccupancy = clearBit(b.BlackOccupancy, sq)
+		b.MaterialPST += v
 	}
 }
 
 func (b *Board) GenWhiteOccupancy() uint64 {
-	return b.WhitePieces.Pawns |
-		b.WhitePieces.Rooks |
-		b.WhitePieces.Knights |
-		b.WhitePieces.Bishops |
-		b.WhitePieces.Queen |
-		b.WhitePieces.King
+	occupancy := uint64(0)
+
+	// white pieces occupy indices Pawn|0b1000 (9) through King|0b1000 (14)
+	for i := int(Pawn) | 0b1000; i <= int(King)|0b1000; i++ {
+		occupancy |= b.Bitboards[i]
+	}
+
+	return occupancy
 }
 
 func (b *Board) GenBlackOccupancy() uint64 {
-	return b.BlackPieces.Pawns |
-		b.BlackPieces.Rooks |
-		b.BlackPieces.Knights |
-		b.BlackPieces.Bishops |
-		b.BlackPieces.Queen |
-		b.BlackPieces.King
+	occupancy := uint64(0)
+
+	// black pieces occupy indices Pawn (1) through King (6)
+	for i := int(Pawn); i <= int(King); i++ {
+		occupancy |= b.Bitboards[i]
+	}
+
+	return occupancy
 }
 
 // fileOf and rankOf for a square.

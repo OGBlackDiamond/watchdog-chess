@@ -49,33 +49,31 @@ func NewBoardFromFen(fen string) (*board.Board, error) {
 			square := rank*8 + file
 			mask := uint64(1) << square
 
-			pieces := &b.BlackPieces
 			colorMask := 0b0000
 			if c >= 'A' && c <= 'Z' {
 				// white pieces are uppercase and carry the color bit (0b1000)
-				pieces = &b.WhitePieces
 				colorMask = 0b1000
 			}
 
 			// interesting switch syntax to catch upper and lower
 			switch c {
 			case 'p', 'P':
-				pieces.Pawns |= mask
+				b.Bitboards[board.Pawn+board.Piece(colorMask)] |= mask
 				b.MailBox[square] = board.Pawn + board.Piece(colorMask)
 			case 'r', 'R':
-				pieces.Rooks |= mask
+				b.Bitboards[board.Rook+board.Piece(colorMask)] |= mask
 				b.MailBox[square] = board.Rook + board.Piece(colorMask)
 			case 'n', 'N':
-				pieces.Knights |= mask
+				b.Bitboards[board.Knight+board.Piece(colorMask)] |= mask
 				b.MailBox[square] = board.Knight + board.Piece(colorMask)
 			case 'b', 'B':
-				pieces.Bishops |= mask
+				b.Bitboards[board.Bishop+board.Piece(colorMask)] |= mask
 				b.MailBox[square] = board.Bishop + board.Piece(colorMask)
 			case 'q', 'Q':
-				pieces.Queen |= mask
+				b.Bitboards[board.Queen+board.Piece(colorMask)] |= mask
 				b.MailBox[square] = board.Queen + board.Piece(colorMask)
 			case 'k', 'K':
-				pieces.King |= mask
+				b.Bitboards[board.King+board.Piece(colorMask)] |= mask
 				b.MailBox[square] = board.King + board.Piece(colorMask)
 			default:
 				return nil, fmt.Errorf("fen %q: invalid piece character %q", fen, c)
@@ -93,6 +91,9 @@ func NewBoardFromFen(fen string) (*board.Board, error) {
 	b.WhiteOccupancy = b.GenWhiteOccupancy()
 	b.BlackOccupancy = b.GenBlackOccupancy()
 	b.Occupancy = b.WhiteOccupancy | b.BlackOccupancy
+
+	// white-relative, so it does not matter that the side to move is parsed later
+	b.MaterialPST = b.ComputeMaterialPST()
 
 	// field 1, side to move
 	switch fields[1] {

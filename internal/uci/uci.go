@@ -60,7 +60,7 @@ func StartUCIHandler() error {
 		case "go":
 			// start the engine searching
 			//fmt.Println("bestmove d7d5")
-			bestMove, _, err := engine.ChooseMove(&boardState, 7, numCoresToUse)
+			bestMove, _, err := engine.ChooseMove(&boardState, 9, numCoresToUse)
 			if err != nil {
 				return err
 			}
@@ -70,9 +70,10 @@ func StartUCIHandler() error {
 			// stop the engine searching
 
 		case "position":
-			// set the position in the engine
+			// set the position in the engine; a bad position command should
+			// not kill the engine, just report and keep listening
 			if err := setEnginePosition(args); err != nil {
-				return nil
+				fmt.Printf("info string %s\n", err.Error())
 			}
 
 		case "ponderhit":
@@ -91,6 +92,9 @@ func newGame() error {
 }
 
 func setEnginePosition(args []string) error {
+	if len(args) == 0 {
+		return errors.New("invalid engine position: missing position type")
+	}
 
 	if len(args) == lastPosStrLen+1 {
 		// the position input is a continuation
@@ -112,12 +116,14 @@ func setEnginePosition(args []string) error {
 	switch args[tokenIndex] {
 	case "startpos":
 		fenString = fen.StartingPositionFEN
+		tokenIndex = 1
 	case "fen":
-		// the fen string contains 6 'tokens'
-		for tokenIndex < 7 {
-			tokenIndex++
-			fenString += args[tokenIndex] + " "
+		// the fen string contains 6 'tokens' following the keyword
+		if len(args) < 7 {
+			return errors.New("invalid engine position: fen requires 6 fields")
 		}
+		fenString = strings.Join(args[1:7], " ")
+		tokenIndex = 7
 	default:
 		return errors.New("invalid engine position")
 	}
@@ -130,7 +136,10 @@ func setEnginePosition(args []string) error {
 
 	boardState = *bState
 
-	tokenIndex++
+	// skip the optional "moves" keyword before the move list
+	if tokenIndex < len(args) && args[tokenIndex] == "moves" {
+		tokenIndex++
+	}
 
 	for _, moveStr := range args[tokenIndex:] {
 		if err := boardState.MakeMoveFromAlgNot(moveStr); err != nil {

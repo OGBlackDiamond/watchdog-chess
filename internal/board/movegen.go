@@ -2,118 +2,118 @@ package board
 
 import "math/bits"
 
-func (b *Board) GenerateLegalMovesForPosition() ([]Move, error) {
+// GeneratePseudoLegalMoves appends every pseudo-legal move for the side to
+// move into buf and returns the resulting slice. Pass a per-ply scratch buffer
+// (e.g. stack[ply][:0]) to avoid allocating; passing nil also works.
+//
+// Pseudo-legal means a move may leave the mover's own king in check. Callers
+// (the search, perft) are responsible for verifying legality by making the
+// move and testing KingIsChecked for the side that moved. The exceptions are
+// castling and king-safety rules that cannot be verified after the fact
+// (castling out of / through check), which are enforced here.
+func (b *Board) GeneratePseudoLegalMoves(buf []Move) []Move {
 
-	moves := make([]Move, 0, 64)
+	moves := buf[:0]
 
-	for square, piece := range b.MailBox {
-		if piece.Type() == NONE {
-			continue
-		}
-		if piece.IsWhite() != b.WhiteToMove {
-			continue
-		}
-
-		mask := setBit(uint64(0), square)
-
-		if err := b.GenerateLegalMovesForPiece(piece, mask, &moves); err != nil {
-			return nil, err
-		}
-
+	occupancy := b.BlackOccupancy
+	if b.WhiteToMove {
+		occupancy = b.WhiteOccupancy
 	}
 
-	return moves, nil
+	for bb := occupancy; bb != 0; bb &= bb - 1 {
+		square := bits.TrailingZeros64(bb)
+		b.generateMovesForPiece(b.MailBox[square], square, &moves)
+	}
+
+	return moves
 }
 
-func (b *Board) GenerateLegalMovesForPiece(piece Piece, mask uint64, moves *[]Move) error {
+// GenerateLegalMovesForPosition returns only fully legal moves. It is a
+// convenience wrapper around GeneratePseudoLegalMoves for callers outside the
+// hot search path (UCI move validation, perft roots, tests). It allocates.
+func (b *Board) GenerateLegalMovesForPosition() []Move {
+
+	pseudo := b.GeneratePseudoLegalMoves(make([]Move, 0, 64))
+
+	// filter in place: the write index never passes the read index
+	legal := pseudo[:0]
+
+	for _, move := range pseudo {
+		child := *b
+		if err := child.MakeMove(move); err != nil {
+			continue
+		}
+		if child.KingIsChecked(b.WhiteToMove) {
+			continue
+		}
+		legal = append(legal, move)
+	}
+
+	return legal
+}
+
+func (b *Board) generateMovesForPiece(piece Piece, square int, moves *[]Move) {
 
 	switch piece.Type() {
 	case Pawn:
-		if err := b.GeneratePawnMoves(piece.IsWhite(), mask, moves); err != nil {
-			return err
-		}
+		b.generatePawnMoves(piece.IsWhite(), square, moves)
 	case Rook:
-		if err := b.GenerateStraightMoves(piece.IsWhite(), mask, moves); err != nil {
-			return err
-		}
+		b.generateStraightMoves(piece.IsWhite(), square, moves)
 	case Knight:
-		if err := b.GenerateKnightMoves(piece.IsWhite(), mask, moves); err != nil {
-			return err
-		}
+		b.generateKnightMoves(piece.IsWhite(), square, moves)
 	case Bishop:
-		if err := b.GenerateDiagonalMoves(piece.IsWhite(), mask, moves); err != nil {
-			return err
-		}
+		b.generateDiagonalMoves(piece.IsWhite(), square, moves)
 	case Queen:
-		if err := b.GenerateDiagonalMoves(piece.IsWhite(), mask, moves); err != nil {
-			return err
-		}
-		if err := b.GenerateStraightMoves(piece.IsWhite(), mask, moves); err != nil {
-			return err
-		}
+		b.generateDiagonalMoves(piece.IsWhite(), square, moves)
+		b.generateStraightMoves(piece.IsWhite(), square, moves)
 	case King:
-		if err := b.GenerateKingMoves(piece.IsWhite(), mask, moves); err != nil {
-			return err
-		}
+		b.generateKingMoves(piece.IsWhite(), square, moves)
 	}
-
-	return nil
 }
 
-func (b *Board) GenerateDiagonalMoves(isWhite bool, mask uint64, moves *[]Move) error {
-
-	startSq := bits.TrailingZeros64(mask)
+func (b *Board) generateDiagonalMoves(isWhite bool, startSq int, moves *[]Move) {
 
 	friendly := b.BlackOccupancy
 	if isWhite {
 		friendly = b.WhiteOccupancy
 	}
 
-	return b.legalMovesFromMask(isWhite, mask, bishopAttacks(startSq, b.Occupancy)&^friendly, moves)
-
+	addMovesFromMask(startSq, bishopAttacks(startSq, b.Occupancy)&^friendly, moves)
 }
 
-func (b *Board) GenerateStraightMoves(isWhite bool, mask uint64, moves *[]Move) error {
-
-	startSq := bits.TrailingZeros64(mask)
+func (b *Board) generateStraightMoves(isWhite bool, startSq int, moves *[]Move) {
 
 	friendly := b.BlackOccupancy
 	if isWhite {
 		friendly = b.WhiteOccupancy
 	}
 
-	return b.legalMovesFromMask(isWhite, mask, rookAttacks(startSq, b.Occupancy)&^friendly, moves)
-
+	addMovesFromMask(startSq, rookAttacks(startSq, b.Occupancy)&^friendly, moves)
 }
 
-func (b *Board) GenerateKnightMoves(isWhite bool, mask uint64, moves *[]Move) error {
-
-	startSq := bits.TrailingZeros64(mask)
+func (b *Board) generateKnightMoves(isWhite bool, startSq int, moves *[]Move) {
 
 	friendly := b.BlackOccupancy
 	if isWhite {
 		friendly = b.WhiteOccupancy
 	}
 
-	return b.legalMovesFromMask(isWhite, mask, knightAttacks[startSq]&^friendly, moves)
-
+	addMovesFromMask(startSq, knightAttacks[startSq]&^friendly, moves)
 }
 
-func (b *Board) GenerateKingMoves(isWhite bool, mask uint64, moves *[]Move) error {
-
-	startSq := bits.TrailingZeros64(mask)
+func (b *Board) generateKingMoves(isWhite bool, startSq int, moves *[]Move) {
 
 	friendly := b.BlackOccupancy
 	if isWhite {
 		friendly = b.WhiteOccupancy
 	}
 
-	if err := b.legalMovesFromMask(isWhite, mask, kingAttacks[startSq]&^friendly, moves); err != nil {
-		return err
-	}
+	addMovesFromMask(startSq, kingAttacks[startSq]&^friendly, moves)
 
+	// castling legality (not through/out of check, squares empty) cannot be
+	// verified by the search's make-then-check, so it is fully enforced here
 	if b.KingIsChecked(isWhite) {
-		return nil // king can't castle if checked
+		return // king can't castle if checked
 	}
 
 	home := blackHome
@@ -126,31 +126,14 @@ func (b *Board) GenerateKingMoves(isWhite bool, mask uint64, moves *[]Move) erro
 	}
 
 	if b.CanCastleKing(home, canCastleKing, isWhite) {
-		if err := b.addMoveIfLegal(
-			isWhite,
-			NewMove(startSq, startSq+2, CastleFlag),
-			moves,
-		); err != nil {
-			return err
-		}
+		*moves = append(*moves, NewMove(startSq, startSq+2, CastleFlag))
 	}
 	if b.CanCastleQueen(home, canCastleQueen, isWhite) {
-		if err := b.addMoveIfLegal(
-			isWhite,
-			NewMove(startSq, startSq-2, CastleFlag),
-			moves,
-		); err != nil {
-			return err
-		}
+		*moves = append(*moves, NewMove(startSq, startSq-2, CastleFlag))
 	}
-
-	return nil
-
 }
 
-func (b *Board) GeneratePawnMoves(isWhite bool, mask uint64, moves *[]Move) error {
-
-	startSq := bits.TrailingZeros64(mask)
+func (b *Board) generatePawnMoves(isWhite bool, startSq int, moves *[]Move) {
 
 	enemyOccupancy := b.WhiteOccupancy
 	index := blackIndex
@@ -168,134 +151,61 @@ func (b *Board) GeneratePawnMoves(isWhite bool, mask uint64, moves *[]Move) erro
 
 	for bb := captureTargets; bb != 0; bb &= bb - 1 {
 		toSq := bits.TrailingZeros64(bb)
-
-		_, err := b.addMoveForPawnIfLegal(isWhite, NewMove(startSq, toSq, NoFlag), moves)
-
-		if err != nil {
-			return err
-		}
+		b.addPawnMove(isWhite, NewMove(startSq, toSq, NoFlag), moves)
 	}
 
 	epTargets := pawnAttacks[index][startSq] & b.EnPassantTarget
 
 	for bb := epTargets; bb != 0; bb &= bb - 1 {
 		toSq := bits.TrailingZeros64(bb)
-
-		_, err := b.addMoveForPawnIfLegal(isWhite, NewMove(startSq, toSq, EnPassantCaptureFlag), moves)
-
-		if err != nil {
-			return err
-		}
+		*moves = append(*moves, NewMove(startSq, toSq, EnPassantCaptureFlag))
 	}
 
 	upOneSquare := startSq + (8 * direction)
-	upOneMask := setBit(uint64(0), upOneSquare)
-	single := b.Occupancy&upOneMask == 0
 
-	if single {
+	if !testBit(b.Occupancy, upOneSquare) {
 
-		didPromote, err := b.addMoveForPawnIfLegal(
+		if didPromote := b.addPawnMove(
 			isWhite,
 			NewMove(startSq, upOneSquare, NoFlag),
 			moves,
-		)
-		if err != nil {
-			return err
+		); didPromote {
+			// don't keep adding moves if a promotion exists
+			return
 		}
 
-		// don't keep adding moves if a promotion exists
-		if didPromote {
-			return nil
-		}
-
-		if mask&startingRank != 0 {
+		if testBit(startingRank, startSq) {
 			upTwoSquare := upOneSquare + (8 * direction)
-			upTwoMask := setBit(uint64(0), upTwoSquare)
-			double := b.Occupancy&upTwoMask == 0
 
-			if double {
-				if err := b.addMoveIfLegal(
-					isWhite,
-					NewMove(startSq, upTwoSquare, PawnTwoUpFlag),
-					moves,
-				); err != nil {
-					return err
-				}
+			if !testBit(b.Occupancy, upTwoSquare) {
+				*moves = append(*moves, NewMove(startSq, upTwoSquare, PawnTwoUpFlag))
 			}
 		}
 	}
-
-	return nil
 }
 
-func (b *Board) addMoveForPawnIfLegal(isWhite bool, move Move, moves *[]Move) (bool, error) {
+// addPawnMove appends the move, expanding it into the four promotion moves if
+// the target square is on the promotion rank. Returns whether it promoted.
+func (b *Board) addPawnMove(isWhite bool, move Move, moves *[]Move) bool {
 
 	promotionRank := blackPawnPromotionRank
-
 	if isWhite {
 		promotionRank = whitePawnPromotionRank
 	}
 
-	targetMask := setBit(uint64(0), move.TargetSquare())
-	didPromote := false
-
-	if targetMask&promotionRank != 0 {
-		didPromote = true
+	if testBit(promotionRank, move.TargetSquare()) {
 		for flag := PromoteToRookFlag; flag <= PromoteToQueenFlag; flag++ {
-			if err := b.addMoveIfLegal(
-				isWhite,
-				NewMove(move.StartSquare(), move.TargetSquare(), flag),
-				moves,
-			); err != nil {
-				return didPromote, err
-			}
+			*moves = append(*moves, NewMove(move.StartSquare(), move.TargetSquare(), flag))
 		}
-	} else {
-		if err := b.addMoveIfLegal(
-			isWhite,
-			move, // no promotion so return a blank move
-			moves,
-		); err != nil {
-			return didPromote, err
-		}
-	}
-
-	return didPromote, nil
-}
-
-func (b *Board) legalMovesFromMask(isWhite bool, pieceMask uint64, attackMask uint64, moves *[]Move) error {
-
-	startSq := bits.TrailingZeros64(pieceMask)
-
-	for bb := attackMask; bb != 0; bb &= bb - 1 {
-		toSq := bits.TrailingZeros64(bb)
-
-		if err := b.addMoveIfLegal(
-			isWhite,
-			NewMove(startSq, toSq, NoFlag),
-			moves,
-		); err != nil {
-			return err
-		}
-
-	}
-
-	return nil
-}
-
-func (b *Board) addMoveIfLegal(isWhite bool, move Move, moves *[]Move) error {
-
-	child := *b
-
-	if err := child.MakeMove(move); err != nil {
-		return err
-	}
-
-	if child.KingIsChecked(isWhite) {
-		return nil
+		return true
 	}
 
 	*moves = append(*moves, move)
+	return false
+}
 
-	return nil
+func addMovesFromMask(startSq int, attackMask uint64, moves *[]Move) {
+	for bb := attackMask; bb != 0; bb &= bb - 1 {
+		*moves = append(*moves, NewMove(startSq, bits.TrailingZeros64(bb), NoFlag))
+	}
 }

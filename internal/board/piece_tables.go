@@ -1,4 +1,4 @@
-package engine
+package board
 
 // piece square tables
 //
@@ -138,14 +138,9 @@ var (
 )
 
 func pstIndex(square int, isWhite bool) int {
-	if !isWhite {
+	if isWhite {
 		return square ^ 56
 	}
 
 	return square
-}
-
-// linear interpolation
-func lerp(a int, b int, f int) int {
-	return a >> 1 // this waters down the table values
 }

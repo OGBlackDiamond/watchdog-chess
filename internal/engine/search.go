@@ -2,16 +2,65 @@ package engine
 
 import (
 	"fmt"
-	"math"
-	"slices"
 
 	"github.com/OGBlackDiamond/watchdog-chess/internal/board"
 )
 
+const (
+	// MaxPly bounds the search depth (with headroom for future extensions /
+	// quiescence). The per-ply scratch buffers are sized by this.
+	MaxPly = 64
+
+	// maxMoves bounds the number of moves in one position; no legal chess
+	// position has more than 218 moves.
+	maxMoves = 256
+
+	// Infinity is greater than any achievable score.
+	Infinity = 1_000_000
+
+	// mateScore is the value of delivering checkmate. Mates found at ply p
+	// score mateScore-p so the search prefers the shortest mate and, when
+	// losing, the longest defense.
+	mateScore = 900_000
+)
+
+// move ordering score layers (highest searched first):
+// captures > promotions > killers > history (quiet moves)
+const (
+	captureScoreBase   = 100_000
+	promotionScoreBase = 90_000
+	killerScore        = 80_000
+	maxHistoryScore    = killerScore - 1_000
+)
+
+// Searcher owns all per-search mutable state: preallocated per-ply move and
+// score buffers (so the hot path never allocates) and the killer/history move
+// ordering tables. It must not be shared between goroutines - for SMP, create
+// one Searcher per thread.
+type Searcher struct {
+	moveStack  [MaxPly][maxMoves]board.Move
+	scoreStack [MaxPly][maxMoves]int
+
+	// boardStack holds the child board copies for copy-make. A node whose
+	// children live at ply p writes them into boardStack[p]. Without this,
+	// escape analysis moves every `child := *b` copy to the heap because
+	// negamax is recursive.
+	boardStack [MaxPly]board.Board
+
+	// killers holds, per ply, the last two quiet moves that caused a beta
+	// cutoff at that ply. Quiet moves matching a killer are ordered just
+	// below captures.
+	killers [MaxPly][2]board.Move
+
+	// history counts quiet beta cutoffs per side/from/to, used to order
+	// quiet moves that would otherwise all tie at score 0.
+	history [2][64][64]int
+}
+
 type SearchReturn struct {
 	move          board.Move
 	depthSearched int
-	score         float64
+	score         int
 	found         bool
 	err           error
 }
@@ -46,7 +95,7 @@ func ChooseMove(b *board.Board, depth int, numThreads int) (board.Move, bool, er
 			continue
 		}
 
-		fmt.Printf("info depth %d score cp %d\n", result.depthSearched, int(result.score))
+		fmt.Printf("info depth %d score cp %d\n", result.depthSearched, result.score)
 
 		if result.depthSearched > bestDepth {
 			bestMove = result.move
@@ -60,42 +109,45 @@ func ChooseMove(b *board.Board, depth int, numThreads int) (board.Move, bool, er
 
 func FindMoveAtDepth(b board.Board, depth int) SearchReturn {
 
-	moves, err := b.GenerateLegalMovesForPosition()
-	if err != nil {
-		return SearchReturn{depthSearched: depth, err: err}
+	if depth >= MaxPly {
+		depth = MaxPly - 1
 	}
 
-	// check or stalemate
-	if len(moves) == 0 {
-		return SearchReturn{depthSearched: depth, found: false}
+	// One per-depth searcher; every node below reuses its buffers.
+	var s Searcher
+
+	moves := b.GeneratePseudoLegalMoves(s.moveStack[0][:0])
+	scores := s.scoreStack[0][:len(moves)]
+	for i, move := range moves {
+		scores[i] = s.scoreMove(&b, move, 0)
 	}
 
-	bestScore := math.Inf(-1)
+	bestScore := -Infinity
 	bestMove := board.NullMove()
 	found := false
 
-	alpha := math.Inf(-1)
-	beta := math.Inf(1)
+	alpha := -Infinity
+	beta := Infinity
 
-	orderMoves(&b, moves)
+	for i := range moves {
+		move := pickNext(moves, scores, i)
 
-	for _, move := range moves {
-		child := b
+		child := &s.boardStack[0]
+		*child = b
 		if err := child.MakeMove(move); err != nil {
 			return SearchReturn{
-				move: board.NullMove(),
-				err:  err,
+				move:          board.NullMove(),
+				depthSearched: depth,
+				err:           err,
 			}
 		}
-		score, err := Negamax(&child, depth-1, -beta, -alpha)
-		score *= -1 //negamaxxing
 
-		if err != nil {
-			return SearchReturn{
-				move: board.NullMove(),
-				err:  err,
-			}
+		// moves are pseudo-legal: discard any that leave our king in check
+		if child.KingIsChecked(b.WhiteToMove) {
+			continue
 		}
+
+		score := -s.negamax(child, depth-1, 1, -beta, -alpha)
 
 		if !found || score > bestScore {
 			bestScore = score
@@ -108,6 +160,7 @@ func FindMoveAtDepth(b board.Board, depth int) SearchReturn {
 		}
 	}
 
+	// found == false means no legal move exists: checkmate or stalemate
 	return SearchReturn{
 		move:          bestMove,
 		depthSearched: depth,
@@ -116,39 +169,37 @@ func FindMoveAtDepth(b board.Board, depth int) SearchReturn {
 	}
 }
 
-func Negamax(b *board.Board, depth int, alpha float64, beta float64) (float64, error) {
-	if depth == 0 {
-		return float64(Evaluate(*b)), nil
+func (s *Searcher) negamax(b *board.Board, depth int, ply int, alpha int, beta int) int {
+
+	if depth <= 0 || ply >= MaxPly {
+		return b.Evaluate()
 	}
 
-	best := math.Inf(-1)
-
-	moves, err := b.GenerateLegalMovesForPosition()
-	if err != nil {
-		return best, err
+	moves := b.GeneratePseudoLegalMoves(s.moveStack[ply][:0])
+	scores := s.scoreStack[ply][:len(moves)]
+	for i, move := range moves {
+		scores[i] = s.scoreMove(b, move, ply)
 	}
 
-	if len(moves) == 0 {
-		if b.KingIsChecked(b.WhiteToMove) {
-			return math.Inf(-1), nil // checkmate for side to move
-		}
-		return 0, nil // stalemate
-	}
+	best := -Infinity
+	legalMoves := 0
 
-	orderMoves(b, moves)
+	for i := range moves {
+		move := pickNext(moves, scores, i)
 
-	for _, move := range moves {
-		child := *b
+		child := &s.boardStack[ply]
+		*child = *b
 		if err := child.MakeMove(move); err != nil {
-			return 0, err
+			continue // impossible for generated moves; skip defensively
 		}
 
-		score, err := Negamax(&child, depth-1, -beta, -alpha)
-		score *= -1 //negamaxxing
-
-		if err != nil {
-			return best, err
+		// moves are pseudo-legal: discard any that leave our king in check
+		if child.KingIsChecked(b.WhiteToMove) {
+			continue
 		}
+		legalMoves++
+
+		score := -s.negamax(child, depth-1, ply+1, -beta, -alpha)
 
 		if score > best {
 			best = score
@@ -159,40 +210,111 @@ func Negamax(b *board.Board, depth int, alpha float64, beta float64) (float64, e
 		}
 
 		if alpha >= beta {
+			// a quiet move that refutes this position is worth trying
+			// early in sibling nodes: record it as a killer and bump
+			// its history score
+			if isQuiet(b, move) {
+				if s.killers[ply][0] != move {
+					s.killers[ply][1] = s.killers[ply][0]
+					s.killers[ply][0] = move
+				}
+
+				h := &s.history[sideIndex(b)][move.StartSquare()][move.TargetSquare()]
+				*h += depth * depth
+				if *h > maxHistoryScore {
+					*h = maxHistoryScore
+				}
+			}
 			break
 		}
-
 	}
 
-	return best, nil
+	if legalMoves == 0 {
+		if b.KingIsChecked(b.WhiteToMove) {
+			return -(mateScore - ply) // checkmate: prefer shorter mates
+		}
+		return 0 // stalemate
+	}
+
+	return best
 }
 
-func orderMoves(bo *board.Board, moves []board.Move) {
-	slices.SortFunc(moves, func(a, b board.Move) int {
-		return scoreMove(bo, b) - scoreMove(bo, a)
-	})
+// pickNext performs one step of a lazy selection sort: it finds the highest
+// scored move in moves[i:], swaps it (and its score) into position i, and
+// returns it. Alpha-beta usually cuts off within the first few moves, so this
+// beats fully sorting the move list.
+func pickNext(moves []board.Move, scores []int, i int) board.Move {
+	best := i
+	for j := i + 1; j < len(moves); j++ {
+		if scores[j] > scores[best] {
+			best = j
+		}
+	}
+
+	moves[i], moves[best] = moves[best], moves[i]
+	scores[i], scores[best] = scores[best], scores[i]
+
+	return moves[i]
 }
 
-// this is NOT position scoring
-func scoreMove(b *board.Board, move board.Move) int {
+// scoreMove assigns a move-ordering score. This is NOT position scoring.
+func (s *Searcher) scoreMove(b *board.Board, move board.Move, ply int) int {
 
 	score := 0
 
-	attacker := b.MailBox[move.StartSquare()]
 	targetPiece := b.MailBox[move.TargetSquare()]
 
-	if targetPiece.Type() != board.NONE && targetPiece.IsWhite() != b.WhiteToMove {
-		score += 10_000
-		score += 10 * pieceValue(targetPiece)
-
-		if attacker.Type() != board.NONE {
-			score -= pieceValue(attacker)
-		}
+	if targetPiece.Type() != board.NONE {
+		// MVV-LVA: most valuable victim, least valuable attacker
+		attacker := b.MailBox[move.StartSquare()]
+		score = captureScoreBase + 10*board.PieceValue(targetPiece) - board.PieceValue(attacker)
+	} else if move.Flag() == board.EnPassantCaptureFlag {
+		// pawn takes pawn; the target square itself is empty
+		score = captureScoreBase + 9*board.PieceValue(board.Pawn)
 	}
 
 	if move.Flag() >= board.PromoteToRookFlag {
-		score += 9_000 // eventually weight this based on the value of the promoting piece
+		score += promotionScoreBase + promotionValue(move.Flag())
 	}
 
-	return score
+	if score != 0 {
+		return score
+	}
+
+	// quiet moves: killers first, then by history
+	if move == s.killers[ply][0] || move == s.killers[ply][1] {
+		return killerScore
+	}
+
+	return s.history[sideIndex(b)][move.StartSquare()][move.TargetSquare()]
+}
+
+// isQuiet reports whether a move is neither a capture nor a promotion.
+func isQuiet(b *board.Board, move board.Move) bool {
+	return b.MailBox[move.TargetSquare()].Type() == board.NONE &&
+		move.Flag() != board.EnPassantCaptureFlag &&
+		move.Flag() < board.PromoteToRookFlag
+}
+
+func sideIndex(b *board.Board) int {
+	if b.WhiteToMove {
+		return 0
+	}
+	return 1
+}
+
+// promotionValue maps a promotion flag to the value of the promoted piece.
+func promotionValue(flag int) int {
+	switch flag {
+	case board.PromoteToQueenFlag:
+		return board.PieceValue(board.Queen)
+	case board.PromoteToRookFlag:
+		return board.PieceValue(board.Rook)
+	case board.PromoteToBishopFlag:
+		return board.PieceValue(board.Bishop)
+	case board.PromoteToKnightFlag:
+		return board.PieceValue(board.Knight)
+	default:
+		return 0
+	}
 }

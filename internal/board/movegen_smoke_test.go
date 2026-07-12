@@ -83,10 +83,7 @@ func TestGeneratedMovesHaveLegalDeltas(t *testing.T) {
 		b := placeStartingPosition(t)
 		b.WhiteToMove = whiteToMove
 
-		moves, err := b.GenerateLegalMovesForPosition()
-		if err != nil {
-			t.Fatalf("GenerateLegalMovesForPosition error: %v", err)
-		}
+		moves := b.GenerateLegalMovesForPosition()
 		if len(moves) == 0 {
 			t.Fatalf("expected legal moves from the start position (whiteToMove=%v)", whiteToMove)
 		}
@@ -119,10 +116,7 @@ func TestStartPositionMoveCount(t *testing.T) {
 	b := placeStartingPosition(t)
 	b.WhiteToMove = true
 
-	moves, err := b.GenerateLegalMovesForPosition()
-	if err != nil {
-		t.Fatalf("GenerateLegalMovesForPosition error: %v", err)
-	}
+	moves := b.GenerateLegalMovesForPosition()
 	if len(moves) != 20 {
 		names := make([]string, 0, len(moves))
 		for _, m := range moves {
