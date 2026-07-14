@@ -26,8 +26,8 @@ func main() {
 
 	numThreads := runtime.NumCPU()
 
-	fmt.Println("option name NumaPolicy type string default <empty>")
 	fmt.Printf("option name Threads type spin default %d min 1 max %d\n", numThreads, numThreads)
+	fmt.Printf("option name Hash type spin default 64 min 1 max 1024")
 
 	// we can do other setup things here
 

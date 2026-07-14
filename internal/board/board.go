@@ -10,6 +10,8 @@ import (
 type Board struct {
 	Bitboards [16]uint64
 
+	Hash uint64 // Zobrist hash value 
+
 	WhiteOccupancy uint64
 	BlackOccupancy uint64
 	Occupancy      uint64
