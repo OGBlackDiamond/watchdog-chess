@@ -210,7 +210,7 @@ func (b *Board) MakeConditionalMoves(move Move, startType Piece, oldEnPassantMas
 		b.clearSquare(bits.TrailingZeros64(oldEnPassantMask), capturedPawn)
 
 	case PawnTwoUpFlag:
-		// The en-passant target sits behind the pawn (a1 = 0 convention).
+		// the en-passant target sits behind the pawn (a1 = 0 convention).
 		// A black pawn double-pushes downward in index, so behind it is a
 		// higher index (+8); a white pawn pushes upward, so behind it is lower (-8).
 		direction := 1
