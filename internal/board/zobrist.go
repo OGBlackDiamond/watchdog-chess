@@ -42,17 +42,12 @@ func (b *Board) ComputeHash() uint64 {
 
 	hash := uint64(0)
 
-	for piece := range zobrist.pieceSquare {
-
-		for square := range zobrist.pieceSquare[piece] {
-
-			if b.MailBox[square].Type() == NONE {
-				continue
-			}
-
-			hash ^= zobrist.pieceSquare[piece][square]
-
+	for square := range 64 {
+		p := b.MailBox[square]
+		if p.IsEmpty() {
+			continue
 		}
+		hash ^= zobrist.pieceSquare[p][square]
 	}
 
 	if !b.WhiteToMove {
@@ -74,8 +69,8 @@ func (b *Board) ComputeHash() uint64 {
 	return hash
 }
 
-func (b *Board) castlingRightsMask() int {
-	rights := 0
+func (b *Board) castlingRightsMask() uint8 {
+	rights := uint8(0)
 	if b.WhiteCanCastleKingSide {
 		rights |= 1
 	}

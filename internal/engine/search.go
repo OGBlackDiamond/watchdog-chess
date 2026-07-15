@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/OGBlackDiamond/watchdog-chess/internal/board"
 )
@@ -31,6 +32,8 @@ const (
 	promotionScoreBase = 90_000
 	killerScore        = 80_000
 	maxHistoryScore    = killerScore - 1_000
+
+	ttHitScore = 1_000_000
 )
 
 // Searcher owns all per-search mutable state: preallocated per-ply move and
@@ -65,19 +68,24 @@ type SearchReturn struct {
 	err           error
 }
 
-func ChooseMove(b *board.Board, depth int, numThreads int) (board.Move, bool, error) {
+func (e *Engine) ChooseMove(depth int, numThreads int) (board.Move, bool, error) {
+	if len(e.tt.entries) == 0 {
+		e.tt.Resize(64)
+	}
+
+	e.tt.generation++
+
 	if numThreads < 1 {
 		numThreads = 1
 	}
 
 	results := make(chan SearchReturn, depth)
 
-	defer close(results)
-
-	for currentDepth := 1; currentDepth <= depth; currentDepth++ {
+	for range depth {
+		time.Sleep(10_000)
 		go func(searchDepth int) {
-			results <- FindMoveAtDepth(*b, searchDepth)
-		}(currentDepth)
+			results <- FindMoveAtDepth(e.b, searchDepth, &e.tt)
+		}(depth)
 	}
 
 	bestMove := board.NullMove()
@@ -107,7 +115,7 @@ func ChooseMove(b *board.Board, depth int, numThreads int) (board.Move, bool, er
 	return bestMove, found, nil
 }
 
-func FindMoveAtDepth(b board.Board, depth int) SearchReturn {
+func FindMoveAtDepth(b board.Board, depth int, tt *TT) SearchReturn {
 
 	if depth >= MaxPly {
 		depth = MaxPly - 1
@@ -119,7 +127,7 @@ func FindMoveAtDepth(b board.Board, depth int) SearchReturn {
 	moves := b.GeneratePseudoLegalMoves(s.moveStack[0][:0])
 	scores := s.scoreStack[0][:len(moves)]
 	for i, move := range moves {
-		scores[i] = s.scoreMove(&b, move, 0)
+		scores[i] = s.scoreMove(&b, move, 0, board.NullMove())
 	}
 
 	bestScore := -Infinity
@@ -147,7 +155,7 @@ func FindMoveAtDepth(b board.Board, depth int) SearchReturn {
 			continue
 		}
 
-		score := -s.negamax(child, depth-1, 1, -beta, -alpha)
+		score := -s.negamax(child, depth-1, 1, -beta, -alpha, tt)
 
 		if !found || score > bestScore {
 			bestScore = score
@@ -169,19 +177,43 @@ func FindMoveAtDepth(b board.Board, depth int) SearchReturn {
 	}
 }
 
-func (s *Searcher) negamax(b *board.Board, depth int, ply int, alpha int, beta int) int {
+func (s *Searcher) negamax(b *board.Board, depth int, ply int, alpha int, beta int, tt *TT) int {
 
 	if depth <= 0 || ply >= MaxPly {
 		return b.Evaluate()
 	}
 
+	origAlpha := alpha
+
+	var ttMove board.Move
+
+	if m, d, sco, _, bnd, hit := tt.getEntry(b.Hash); hit {
+		ttMove = m
+		if d >= depth {
+			v := valueFromTT(sco, ply)
+			switch Bound(bnd) {
+			case BoundExact:
+				return v
+			case BoundLower:
+				if v >= beta {
+					return v
+				}
+			case BoundUpper:
+				if v <= alpha {
+					return v
+				}
+			}
+		}
+	}
+
 	moves := b.GeneratePseudoLegalMoves(s.moveStack[ply][:0])
 	scores := s.scoreStack[ply][:len(moves)]
 	for i, move := range moves {
-		scores[i] = s.scoreMove(b, move, ply)
+		scores[i] = s.scoreMove(b, move, ply, ttMove)
 	}
 
 	best := -Infinity
+	bestMove := board.NullMove()
 	legalMoves := 0
 
 	for i := range moves {
@@ -199,10 +231,11 @@ func (s *Searcher) negamax(b *board.Board, depth int, ply int, alpha int, beta i
 		}
 		legalMoves++
 
-		score := -s.negamax(child, depth-1, ply+1, -beta, -alpha)
+		score := -s.negamax(child, depth-1, ply+1, -beta, -alpha, tt)
 
 		if score > best {
 			best = score
+			bestMove = move
 		}
 
 		if score > alpha {
@@ -236,6 +269,17 @@ func (s *Searcher) negamax(b *board.Board, depth int, ply int, alpha int, beta i
 		return 0 // stalemate
 	}
 
+	var bnd Bound
+	switch {
+	case best <= origAlpha:
+		bnd = BoundUpper
+	case best >= beta:
+		bnd = BoundLower
+	default:
+		bnd = BoundExact
+	}
+	tt.storeEntry(b.Hash, bestMove, depth, valueToTT(best, ply), int(bnd))
+
 	return best
 }
 
@@ -258,7 +302,11 @@ func pickNext(moves []board.Move, scores []int, i int) board.Move {
 }
 
 // scoreMove assigns a move-ordering score. This is NOT position scoring.
-func (s *Searcher) scoreMove(b *board.Board, move board.Move, ply int) int {
+func (s *Searcher) scoreMove(b *board.Board, move board.Move, ply int, ttMove board.Move) int {
+
+	if move == ttMove {
+		return ttHitScore
+	}
 
 	score := 0
 

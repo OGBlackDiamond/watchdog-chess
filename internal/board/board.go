@@ -10,7 +10,7 @@ import (
 type Board struct {
 	Bitboards [16]uint64
 
-	Hash uint64 // Zobrist hash value 
+	Hash uint64 // Zobrist hash value
 
 	WhiteOccupancy uint64
 	BlackOccupancy uint64
@@ -118,6 +118,7 @@ func (b *Board) MakeMove(move Move) error {
 	b.MakeConditionalMoves(move, startType, oldEnPassantMask)
 
 	b.WhiteToMove = !b.WhiteToMove
+	b.Hash ^= zobrist.sideToMove
 
 	return nil
 }
@@ -132,6 +133,8 @@ func (b *Board) MakeMoveFromAlgNot(algString string) error {
 }
 
 func (b *Board) UpdateConditionalMoveState(move Move, startType Piece, targetType Piece) {
+
+	oldCastlingMask := b.castlingRightsMask()
 
 	switch startType.Type() {
 	case King:
@@ -172,6 +175,17 @@ func (b *Board) UpdateConditionalMoveState(move Move, startType Piece, targetTyp
 		case 63:
 			b.BlackCanCastleKingSide = false
 		}
+	}
+
+	newCastlingMask := b.castlingRightsMask()
+	if oldCastlingMask != newCastlingMask {
+		b.Hash ^= zobrist.castling[oldCastlingMask]
+		b.Hash ^= zobrist.castling[newCastlingMask]
+	}
+
+	if b.EnPassantTarget != 0 {
+		file, _, _ := MaskToGrid(b.EnPassantTarget)
+		b.Hash ^= zobrist.enPassantFile[file]
 	}
 
 	b.EnPassantPieceMask = uint64(0)
@@ -222,6 +236,10 @@ func (b *Board) MakeConditionalMoves(move Move, startType Piece, oldEnPassantMas
 
 		b.EnPassantPieceMask = setBit(b.EnPassantPieceMask, targetSquare)
 		b.EnPassantTarget = setBit(b.EnPassantTarget, targetSquare+(8*direction))
+
+		file, _, _ := MaskToGrid(b.EnPassantTarget)
+		b.Hash ^= zobrist.enPassantFile[file]
+
 	}
 }
 
@@ -236,6 +254,8 @@ func (b *Board) setSquare(sq int, p Piece) {
 	b.MailBox[sq] = p
 
 	v := PieceValue(p) + pieceSquareValue(p, sq)
+
+	b.Hash ^= zobrist.pieceSquare[p][sq]
 
 	// update the cached Occupancy
 	b.Occupancy = setBit(b.Occupancy, sq)
@@ -254,6 +274,8 @@ func (b *Board) clearSquare(sq int, p Piece) {
 	b.MailBox[sq] = NONE
 
 	v := PieceValue(p) + pieceSquareValue(p, sq)
+
+	b.Hash ^= zobrist.pieceSquare[p][sq]
 
 	// update the cached occupancy
 	b.Occupancy = clearBit(b.Occupancy, sq)

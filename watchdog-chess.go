@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"runtime"
 
 	"github.com/OGBlackDiamond/watchdog-chess/internal/uci"
 )
@@ -23,16 +22,6 @@ func main() {
 
 	fmt.Println("id name " + engineName)
 	fmt.Println("id author " + author)
-
-	numThreads := runtime.NumCPU()
-
-	fmt.Printf("option name Threads type spin default %d min 1 max %d\n", numThreads, numThreads)
-	fmt.Printf("option name Hash type spin default 64 min 1 max 1024")
-
-	// we can do other setup things here
-
-	// tell the GUI we're ready
-	fmt.Println("uciok")
 
 	// this starts UCI talks
 	// all processing will happen in threads so this blocking main is fine

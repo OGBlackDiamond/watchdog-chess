@@ -3,28 +3,30 @@ package uci
 
 import (
 	"bufio"
-	"errors"
 	"fmt"
 	"os"
 	"runtime"
 	"strings"
 
-	"github.com/OGBlackDiamond/watchdog-chess/internal/board"
 	"github.com/OGBlackDiamond/watchdog-chess/internal/engine"
-	"github.com/OGBlackDiamond/watchdog-chess/internal/fen"
 )
 
 var (
-	boardState board.Board
-
-	// this stores the length of the last position string
-	lastPosStrLen int = -1
+	e engine.Engine
 )
 
 // StartUCIHandler handles all general UCI command throughput
 func StartUCIHandler() error {
 
-	numCoresToUse := runtime.NumCPU()
+	numThreads := runtime.NumCPU()
+
+	fmt.Printf("option name Threads type spin default %d min 1 max %d\n", numThreads, numThreads)
+	fmt.Printf("option name Hash type spin default 64 min 1 max 1024\n")
+
+	// we can do other setup things here
+
+	// tell the GUI we're ready
+	fmt.Println("uciok")
 
 	scanner := bufio.NewScanner(os.Stdin)
 
@@ -56,11 +58,11 @@ func StartUCIHandler() error {
 
 		case "setoption":
 			// if we allow config, set it up
+			e.SetTTSize(64)
 
 		case "go":
 			// start the engine searching
-			//fmt.Println("bestmove d7d5")
-			bestMove, _, err := engine.ChooseMove(&boardState, 9, numCoresToUse)
+			bestMove, _, err := e.ChooseMove(10, numThreads)
 			if err != nil {
 				return err
 			}
@@ -72,7 +74,7 @@ func StartUCIHandler() error {
 		case "position":
 			// set the position in the engine; a bad position command should
 			// not kill the engine, just report and keep listening
-			if err := setEnginePosition(args); err != nil {
+			if err := e.SetEnginePosition(args); err != nil {
 				fmt.Printf("info string %s\n", err.Error())
 			}
 
@@ -87,67 +89,6 @@ func StartUCIHandler() error {
 }
 
 func newGame() error {
-
-	return nil
-}
-
-func setEnginePosition(args []string) error {
-	if len(args) == 0 {
-		return errors.New("invalid engine position: missing position type")
-	}
-
-	if len(args) == lastPosStrLen+1 {
-		// the position input is a continuation
-
-		// make the most recent move to update board state
-		if err := boardState.MakeMoveFromAlgNot(args[len(args)-1]); err != nil {
-			return errors.New("setEnginePosition failed with: " + err.Error())
-		}
-
-		lastPosStrLen++
-
-		return nil
-	}
-
-	var fenString string
-
-	tokenIndex := 0
-
-	switch args[tokenIndex] {
-	case "startpos":
-		fenString = fen.StartingPositionFEN
-		tokenIndex = 1
-	case "fen":
-		// the fen string contains 6 'tokens' following the keyword
-		if len(args) < 7 {
-			return errors.New("invalid engine position: fen requires 6 fields")
-		}
-		fenString = strings.Join(args[1:7], " ")
-		tokenIndex = 7
-	default:
-		return errors.New("invalid engine position")
-	}
-
-	bState, err := fen.NewBoardFromFen(fenString)
-
-	if err != nil {
-		return errors.New("setEnginePosition failed with: " + err.Error())
-	}
-
-	boardState = *bState
-
-	// skip the optional "moves" keyword before the move list
-	if tokenIndex < len(args) && args[tokenIndex] == "moves" {
-		tokenIndex++
-	}
-
-	for _, moveStr := range args[tokenIndex:] {
-		if err := boardState.MakeMoveFromAlgNot(moveStr); err != nil {
-			return errors.New("setEnginePosition failed with: " + err.Error())
-		}
-	}
-
-	lastPosStrLen = len(args)
-
+	e.SetTTSize(64)
 	return nil
 }

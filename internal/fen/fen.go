@@ -146,7 +146,6 @@ func NewBoardFromFen(fen string) (*board.Board, error) {
 		b.EnPassantPieceMask = uint64(1) << (pawnRank*8 + file)
 	}
 
-
 	b.Hash = b.ComputeHash()
 
 	return b, nil

@@ -6,6 +6,12 @@ import (
 	"github.com/OGBlackDiamond/watchdog-chess/internal/fen"
 )
 
+func testTT() *TT {
+	var tt TT
+	tt.Resize(1)
+	return &tt
+}
+
 func TestFindsMateInOne(t *testing.T) {
 	// Scholar's mate: white to move, Qh5xf7#
 	b, err := fen.NewBoardFromFen("r1bqkb1r/pppp1ppp/2n2n2/4p2Q/2B1P3/8/PPPP1PPP/RNB1K1NR w KQkq - 0 4")
@@ -13,7 +19,7 @@ func TestFindsMateInOne(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := FindMoveAtDepth(*b, 3)
+	result := FindMoveAtDepth(*b, 3, testTT())
 	if result.err != nil {
 		t.Fatal(result.err)
 	}
@@ -36,7 +42,7 @@ func TestPrefersShorterMate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := FindMoveAtDepth(*b, 5)
+	result := FindMoveAtDepth(*b, 5, testTT())
 	if result.err != nil {
 		t.Fatal(result.err)
 	}
@@ -55,7 +61,7 @@ func TestCheckmatedPositionReturnsNotFound(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := FindMoveAtDepth(*b, 3)
+	result := FindMoveAtDepth(*b, 3, testTT())
 	if result.err != nil {
 		t.Fatal(result.err)
 	}
@@ -71,7 +77,7 @@ func TestStalematePositionReturnsNotFound(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := FindMoveAtDepth(*b, 3)
+	result := FindMoveAtDepth(*b, 3, testTT())
 	if result.err != nil {
 		t.Fatal(result.err)
 	}
@@ -88,7 +94,7 @@ func TestSearchAvoidsIllegalMoves(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := FindMoveAtDepth(*b, 3)
+	result := FindMoveAtDepth(*b, 3, testTT())
 	if result.err != nil {
 		t.Fatal(result.err)
 	}
@@ -103,6 +109,17 @@ func TestSearchAvoidsIllegalMoves(t *testing.T) {
 	}
 }
 
+func TestSetEnginePositionStartposOnZeroValueEngine(t *testing.T) {
+	var e Engine
+
+	if err := e.SetEnginePosition([]string{"startpos"}); err != nil {
+		t.Fatalf("SetEnginePosition(startpos) error: %v", err)
+	}
+	if e.b.Hash == 0 {
+		t.Fatal("expected startpos to initialize board hash")
+	}
+}
+
 // BenchmarkFindMoveAtDepth measures single-thread search speed and, with
 // -benchmem, verifies the hot path does not allocate (expect ~1 alloc/op for
 // the Searcher itself).
@@ -113,8 +130,9 @@ func BenchmarkFindMoveAtDepth(bench *testing.B) {
 	}
 
 	bench.ResetTimer()
+	tt := testTT()
 	for range bench.N {
-		result := FindMoveAtDepth(*b, 5)
+		result := FindMoveAtDepth(*b, 5, tt)
 		if result.err != nil {
 			bench.Fatal(result.err)
 		}
