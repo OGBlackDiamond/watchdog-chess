@@ -79,20 +79,22 @@ func (e *Engine) ChooseMove(depth int, numThreads int) (board.Move, bool, error)
 		numThreads = 1
 	}
 
-	results := make(chan SearchReturn, depth)
+	results := make(chan SearchReturn, numThreads)
 
-	for range depth {
+	for i := range depth {
 		time.Sleep(10_000)
-		go func(searchDepth int) {
-			results <- FindMoveAtDepth(e.b, searchDepth, &e.tt)
-		}(depth)
+		for range numThreads {
+			go func(searchDepth int) {
+				results <- FindMoveAtDepth(e.b, i+1, &e.tt)
+			}(depth)
+		}
 	}
 
 	bestMove := board.NullMove()
 	bestDepth := -1
 	found := false
 
-	for range depth {
+	for range numThreads * depth {
 		result := <-results
 		if result.err != nil {
 			return board.NullMove(), false, result.err
